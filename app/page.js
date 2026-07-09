@@ -5,7 +5,8 @@ import { motion, AnimatePresence, MotionConfig } from 'framer-motion'
 import {
   Printer, Package, Search, ShieldCheck, LogOut, Trash2, Pencil, Upload,
   Loader2, CheckCircle2, Copy, Clock, Weight, Boxes, Zap, ExternalLink,
-  Sparkles, ClipboardList, RefreshCw, X, ImageIcon, Send, Home as HomeIcon
+  Sparkles, ClipboardList, RefreshCw, X, ImageIcon, Send, Home as HomeIcon,
+  Palette, Plus, Save
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
@@ -168,11 +169,25 @@ function PreviewCard({ preview, loading }) {
 // =============================================================
 function HomeView({ setView, setLastOrder }) {
   const [form, setForm] = useState({
-    name: '', makerworldLink: '', color: 'Egal / Überrasch mich',
+    name: '', makerworldLink: '', color: '',
     material: 'PLA', size: 100, quantity: 1, priority: 'Normal', notes: '',
   })
   const [submitting, setSubmitting] = useState(false)
   const [manual, setManual] = useState({ grams: '', hours: '' })
+  const [colors, setColors] = useState(COLORS)
+
+  // Verfuegbare Farben aus der Datenbank laden (vom Admin verwaltet)
+  useEffect(() => {
+    fetch('/api/colors')
+      .then((r) => r.json())
+      .then((data) => {
+        if (Array.isArray(data.colors) && data.colors.length > 0) {
+          setColors(data.colors)
+          setForm((f) => ({ ...f, color: f.color || data.colors[0].name }))
+        }
+      })
+      .catch(() => {})
+  }, [])
 
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }))
 
@@ -279,9 +294,9 @@ function HomeView({ setView, setLastOrder }) {
               <div className="space-y-2">
                 <Label>Wunschfarbe</Label>
                 <Select value={form.color} onValueChange={(v) => set('color', v)}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectTrigger><SelectValue placeholder="Farbe wählen" /></SelectTrigger>
                   <SelectContent>
-                    {COLORS.map((c) => (
+                    {colors.map((c) => (
                       <SelectItem key={c.name} value={c.name}>
                         <span className="flex items-center gap-2">
                           <span className="h-4 w-4 rounded-full border border-border" style={{ background: c.hex }} />
@@ -559,6 +574,8 @@ function AdminView() {
   const [loading, setLoading] = useState(false)
   const [orders, setOrders] = useState([])
   const [editing, setEditing] = useState(null)
+  const [colors, setColors] = useState([])
+  const [savingColors, setSavingColors] = useState(false)
 
   useEffect(() => {
     const t = typeof window !== 'undefined' ? localStorage.getItem('admin_token') : null
@@ -597,6 +614,35 @@ function AdminView() {
   }, [token])
 
   useEffect(() => { loadOrders() }, [loadOrders])
+
+  // --- Farbverwaltung ---
+  const loadColors = useCallback(async () => {
+    try {
+      const res = await fetch('/api/colors')
+      const data = await res.json()
+      setColors(Array.isArray(data.colors) ? data.colors : [])
+    } catch (e) { /* ignore */ }
+  }, [])
+
+  useEffect(() => { if (token) loadColors() }, [token, loadColors])
+
+  const setColorField = (i, key, val) => setColors((cs) => cs.map((c, j) => (j === i ? { ...c, [key]: val } : c)))
+  const addColor = () => setColors((cs) => [...cs, { name: '', hex: '#8b5cf6' }])
+  const removeColor = (i) => setColors((cs) => cs.filter((_, j) => j !== i))
+  const saveColors = async () => {
+    const clean = colors.filter((c) => c.name && c.name.trim())
+    setSavingColors(true)
+    try {
+      const res = await fetch('/api/settings/colors', {
+        method: 'PUT', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ colors: clean }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Fehler')
+      setColors(data.colors)
+      toast.success('Farben gespeichert')
+    } catch (e) { toast.error(e.message) } finally { setSavingColors(false) }
+  }
 
   const updateOrder = async (id, patch) => {
     try {
@@ -677,6 +723,43 @@ function AdminView() {
           </div>
         ))}
       </div>
+
+      {/* Farbverwaltung */}
+      <Card className="glass-card mb-6">
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <CardTitle className="flex items-center gap-2 text-base"><Palette className="h-5 w-5 text-primary" /> Verfügbare Farben</CardTitle>
+            <div className="flex gap-2">
+              <Button size="sm" variant="secondary" onClick={addColor} className="gap-1"><Plus className="h-4 w-4" /> Farbe</Button>
+              <Button size="sm" onClick={saveColors} disabled={savingColors} className="gap-1">
+                {savingColors ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} Speichern
+              </Button>
+            </div>
+          </div>
+          <CardDescription>Lege fest, welche Filament-Farben Kunden im Formular auswählen können.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {colors.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Noch keine Farben. Füge mit „+ Farbe" welche hinzu.</p>
+          ) : (
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {colors.map((c, i) => (
+                <div key={i} className="flex items-center gap-2 rounded-lg border border-border bg-muted/20 p-2">
+                  <input
+                    type="color"
+                    value={/^#[0-9a-fA-F]{6}$/.test(c.hex) ? c.hex : '#888888'}
+                    onChange={(e) => setColorField(i, 'hex', e.target.value)}
+                    className="h-9 w-10 shrink-0 cursor-pointer rounded border border-border bg-transparent"
+                    title="Farbe wählen"
+                  />
+                  <Input value={c.name} placeholder="Farbname" onChange={(e) => setColorField(i, 'name', e.target.value)} className="h-9" />
+                  <Button size="icon" variant="ghost" className="text-destructive shrink-0" onClick={() => removeColor(i)}><Trash2 className="h-4 w-4" /></Button>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Auftragsliste */}
       {orders.length === 0 ? (

@@ -190,6 +190,20 @@ function genCustomerCode() {
 
 const STATUSES = ['Eingegangen', 'In Pruefung', 'Druck laeuft', 'Fertig', 'Abholbereit', 'Abgeschlossen']
 
+// Standard-Farben (werden verwendet, solange der Admin keine eigene Liste gespeichert hat)
+const DEFAULT_COLORS = [
+  { name: 'Schwarz', hex: '#1a1a1a' },
+  { name: 'Weiss', hex: '#f5f5f5' },
+  { name: 'Grau', hex: '#8a8a8a' },
+  { name: 'Rot', hex: '#e11d48' },
+  { name: 'Blau', hex: '#2563eb' },
+  { name: 'Gruen', hex: '#16a34a' },
+  { name: 'Gelb', hex: '#facc15' },
+  { name: 'Orange', hex: '#f97316' },
+  { name: 'Silber', hex: '#c0c0c0' },
+  { name: 'Gold', hex: '#d4af37' },
+]
+
 function sanitize(order) {
   if (!order) return order
   const { _id, ...rest } = order
@@ -209,10 +223,35 @@ async function handler(request) {
   try {
     const database = await connectToMongo()
     const orders = database.collection('orders')
+    const settings = database.collection('settings')
 
     // --- Health ---
     if (seg.length === 0) {
       return json({ message: '3D Druck Service API', ok: true })
+    }
+
+    // --- Farben abrufen (oeffentlich) ---
+    if (seg[0] === 'colors' && method === 'GET') {
+      const doc = await settings.findOne({ key: 'colors' })
+      const colors = (doc && Array.isArray(doc.value) && doc.value.length > 0) ? doc.value : DEFAULT_COLORS
+      return json({ colors })
+    }
+
+    // --- Farben speichern (Admin) ---
+    if (seg[0] === 'settings' && seg[1] === 'colors' && method === 'PUT') {
+      if (!isAuthed(request)) return json({ error: 'Nicht autorisiert' }, 401)
+      const body = await request.json().catch(() => ({}))
+      const colors = Array.isArray(body.colors)
+        ? body.colors
+            .filter((c) => c && typeof c.name === 'string' && c.name.trim())
+            .map((c) => ({ name: c.name.trim(), hex: c.hex || '#888888' }))
+        : []
+      await settings.updateOne(
+        { key: 'colors' },
+        { $set: { key: 'colors', value: colors, updatedAt: new Date().toISOString() } },
+        { upsert: true }
+      )
+      return json({ ok: true, colors })
     }
 
     // --- MakerWorld Vorschau ---

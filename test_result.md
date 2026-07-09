@@ -210,6 +210,36 @@ backend:
         -agent: "testing"
         -comment: "✅ TESTED: With auth deletes successfully (200 OK). Without auth returns 401. Non-existent ID returns 404. Deleted order no longer trackable (404 on track endpoint)."
 
+  - task: "Farben abrufen (GET /api/colors)"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "Oeffentlich, kein Auth. Liefert {colors:[{name,hex}]}. Ohne gespeicherte Farben werden DEFAULT_COLORS (10 Stueck) zurueckgegeben."
+        -working: true
+        -agent: "testing"
+        -comment: "✅ TESTED: Public endpoint returns 200. Returns 10 default colors when no colors saved. After saving colors, returns saved colors (not defaults). Color structure valid (name, hex). No MongoDB _id leak. All tests passed (5/5)."
+
+  - task: "Farben speichern (PUT /api/settings/colors, Auth)"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "Admin (Bearer Token noetig). Body {colors:[{name,hex}]} -> speichert und liefert {ok:true, colors}. Leere/namenlose Eintraege werden herausgefiltert. Ohne Token 401."
+        -working: true
+        -agent: "testing"
+        -comment: "✅ TESTED: Without auth returns 401. With Bearer token and valid body returns 200 with ok:true. Empty names correctly filtered (3 colors sent, 2 saved). Saved colors persist and override defaults. Idempotency verified (can update colors multiple times). No MongoDB _id leak. All tests passed (5/5)."
+
 frontend:
   - task: "Startseite + Auftragsformular + Live-Preis + Erfolgsdialog"
     implemented: true
@@ -254,10 +284,7 @@ metadata:
   run_ui: true
 
 test_plan:
-  current_focus:
-    - "Startseite + Auftragsformular + Live-Preis + Erfolgsdialog"
-    - "Status-Tracking per Kundencode"
-    - "Admin-Login + Dashboard (Status aendern, bearbeiten, loeschen, Fotos)"
+  current_focus: []
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
@@ -267,3 +294,7 @@ agent_communication:
     -message: "Backend bereits vollstaendig getestet (39/39). Jetzt Frontend-Test gewuenscht. Admin-Login: admin/Admin123!."
     -agent: "testing"
     -message: "✅ ALL BACKEND TESTS PASSED (39/39). Comprehensive testing completed: Order creation (Normal/Eilig with price verification), validation, tracking, admin login, order listing, updates (status/quantity/photos with price recalculation), deletion, and MakerWorld preview. All authentication checks working. No MongoDB _id leaks. Price formula verified. Ready for user acceptance."
+    -agent: "main"
+    -message: "NEUE FUNKTION: Admin kann verfuegbare Farben verwalten. Bitte NUR die neuen Farb-Endpunkte testen: (1) GET /api/colors -> oeffentlich, liefert {colors:[{name,hex}]}. Ohne gespeicherte Farben werden DEFAULT_COLORS (10 Stueck) zurueckgegeben. (2) PUT /api/settings/colors -> Admin (Bearer Token noetig, ohne Token 401). Body {colors:[{name:'Test',hex:'#ff0000'}]} -> speichert und liefert {ok:true, colors}. Danach GET /api/colors muss die gespeicherten Farben liefern. Leere/namenlose Eintraege werden herausgefiltert. Admin-Login admin/Admin123!."
+    -agent: "testing"
+    -message: "✅ COLOR ENDPOINTS FULLY TESTED (5/5 tests passed). GET /api/colors: Returns 10 default colors when none saved, returns saved colors after PUT. PUT /api/settings/colors: Requires auth (401 without token), filters empty names correctly (sent 3, saved 2), supports idempotent updates. No MongoDB _id leaks. All functionality working as specified."

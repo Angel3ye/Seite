@@ -749,6 +749,231 @@ except Exception as e:
     log_fail("MakerWorld preview - Missing URL", f"Exception: {str(e)}")
 
 # ============================================================================
+# TEST 22: GET /api/colors - Default colors (no saved colors yet)
+# ============================================================================
+print("\n" + "=" * 80)
+print("TEST 22: GET /api/colors - Default colors (public endpoint)")
+print("=" * 80)
+
+try:
+    response = requests.get(f"{BASE_URL}/colors", timeout=10)
+    print(f"Status Code: {response.status_code}")
+    
+    if response.status_code == 200:
+        data = response.json()
+        print(f"Response: {json.dumps(data, indent=2, ensure_ascii=False)}")
+        
+        if "colors" in data and isinstance(data["colors"], list):
+            colors = data["colors"]
+            print(f"Number of colors: {len(colors)}")
+            
+            # Should return DEFAULT_COLORS (10 entries) if no colors saved yet
+            if len(colors) == 10:
+                log_pass("GET /api/colors - Returns 10 default colors")
+            else:
+                log_warning("GET /api/colors - Color count", f"Expected 10 default colors, got {len(colors)}")
+            
+            # Verify structure: each color should have name and hex
+            if all(isinstance(c, dict) and "name" in c and "hex" in c for c in colors):
+                log_pass("GET /api/colors - Color structure valid (name, hex)")
+            else:
+                log_fail("GET /api/colors - Color structure", "Missing name or hex fields")
+            
+            # Verify no MongoDB _id
+            if not any("_id" in c for c in colors):
+                log_pass("GET /api/colors - No MongoDB _id in response")
+            else:
+                log_fail("GET /api/colors - MongoDB _id leak", "Response contains _id field")
+            
+            log_pass("GET /api/colors - Public endpoint (200 OK)")
+        else:
+            log_fail("GET /api/colors - Response structure", "Missing or invalid colors array")
+    else:
+        log_fail("GET /api/colors - Public endpoint", f"Expected 200, got {response.status_code}: {response.text}")
+        
+except Exception as e:
+    log_fail("GET /api/colors - Public endpoint", f"Exception: {str(e)}")
+
+# ============================================================================
+# TEST 23: PUT /api/settings/colors - Without Authorization
+# ============================================================================
+print("\n" + "=" * 80)
+print("TEST 23: PUT /api/settings/colors - Without Authorization")
+print("=" * 80)
+
+try:
+    payload = {
+        "colors": [
+            {"name": "Testrot", "hex": "#ff0000"}
+        ]
+    }
+    response = requests.put(f"{BASE_URL}/settings/colors", json=payload, timeout=10)
+    print(f"Status Code: {response.status_code}")
+    
+    if response.status_code == 401:
+        log_pass("PUT /api/settings/colors - No auth returns 401")
+    else:
+        log_fail("PUT /api/settings/colors - No auth", f"Expected 401, got {response.status_code}")
+        
+except Exception as e:
+    log_fail("PUT /api/settings/colors - No auth", f"Exception: {str(e)}")
+
+# ============================================================================
+# TEST 24: PUT /api/settings/colors - With Authorization (filter empty names)
+# ============================================================================
+print("\n" + "=" * 80)
+print("TEST 24: PUT /api/settings/colors - With Authorization (filter empty names)")
+print("=" * 80)
+
+if admin_token:
+    try:
+        headers = {"Authorization": f"Bearer {admin_token}"}
+        payload = {
+            "colors": [
+                {"name": "Testrot", "hex": "#ff0000"},
+                {"name": "Testblau", "hex": "#0000ff"},
+                {"name": "", "hex": "#123456"}  # This should be filtered out
+            ]
+        }
+        
+        response = requests.put(f"{BASE_URL}/settings/colors", json=payload, headers=headers, timeout=10)
+        print(f"Status Code: {response.status_code}")
+        
+        if response.status_code == 200:
+            data = response.json()
+            print(f"Response: {json.dumps(data, indent=2, ensure_ascii=False)}")
+            
+            if data.get("ok"):
+                log_pass("PUT /api/settings/colors - ok: true")
+            else:
+                log_fail("PUT /api/settings/colors - Response", "Expected ok:true")
+            
+            if "colors" in data and isinstance(data["colors"], list):
+                colors = data["colors"]
+                print(f"Saved colors count: {len(colors)}")
+                
+                # Should only have 2 colors (empty name filtered out)
+                if len(colors) == 2:
+                    log_pass("PUT /api/settings/colors - Empty names filtered (2 colors saved)")
+                else:
+                    log_fail("PUT /api/settings/colors - Filter empty names", f"Expected 2 colors, got {len(colors)}")
+                
+                # Verify the saved colors
+                names = [c.get("name") for c in colors]
+                if "Testrot" in names and "Testblau" in names:
+                    log_pass("PUT /api/settings/colors - Correct colors saved (Testrot, Testblau)")
+                else:
+                    log_fail("PUT /api/settings/colors - Saved colors", f"Expected Testrot and Testblau, got {names}")
+                
+                # Verify no empty names
+                if not any(c.get("name", "").strip() == "" for c in colors):
+                    log_pass("PUT /api/settings/colors - No empty names in saved colors")
+                else:
+                    log_fail("PUT /api/settings/colors - Empty names", "Found empty name in saved colors")
+                
+                # Verify no MongoDB _id
+                if not any("_id" in c for c in colors):
+                    log_pass("PUT /api/settings/colors - No MongoDB _id in response")
+                else:
+                    log_fail("PUT /api/settings/colors - MongoDB _id leak", "Response contains _id field")
+            else:
+                log_fail("PUT /api/settings/colors - Response structure", "Missing or invalid colors array")
+            
+            log_pass("PUT /api/settings/colors - With auth (200 OK)")
+        else:
+            log_fail("PUT /api/settings/colors - With auth", f"Expected 200, got {response.status_code}: {response.text}")
+            
+    except Exception as e:
+        log_fail("PUT /api/settings/colors - With auth", f"Exception: {str(e)}")
+else:
+    log_fail("PUT /api/settings/colors - With auth", "No admin token available")
+
+# ============================================================================
+# TEST 25: GET /api/colors - Verify saved colors (not defaults)
+# ============================================================================
+print("\n" + "=" * 80)
+print("TEST 25: GET /api/colors - Verify saved colors (not defaults)")
+print("=" * 80)
+
+try:
+    response = requests.get(f"{BASE_URL}/colors", timeout=10)
+    print(f"Status Code: {response.status_code}")
+    
+    if response.status_code == 200:
+        data = response.json()
+        print(f"Response: {json.dumps(data, indent=2, ensure_ascii=False)}")
+        
+        if "colors" in data and isinstance(data["colors"], list):
+            colors = data["colors"]
+            print(f"Number of colors: {len(colors)}")
+            
+            # Should now return the 2 saved colors (not the 10 defaults)
+            if len(colors) == 2:
+                log_pass("GET /api/colors - Returns 2 saved colors (not defaults)")
+            else:
+                log_fail("GET /api/colors - Saved colors count", f"Expected 2 colors, got {len(colors)}")
+            
+            # Verify the colors are the ones we saved
+            names = [c.get("name") for c in colors]
+            if "Testrot" in names and "Testblau" in names:
+                log_pass("GET /api/colors - Saved colors retrieved (Testrot, Testblau)")
+            else:
+                log_fail("GET /api/colors - Saved colors", f"Expected Testrot and Testblau, got {names}")
+            
+            log_pass("GET /api/colors - Saved colors verification (200 OK)")
+        else:
+            log_fail("GET /api/colors - Response structure", "Missing or invalid colors array")
+    else:
+        log_fail("GET /api/colors - Saved colors", f"Expected 200, got {response.status_code}: {response.text}")
+        
+except Exception as e:
+    log_fail("GET /api/colors - Saved colors", f"Exception: {str(e)}")
+
+# ============================================================================
+# TEST 26: PUT /api/settings/colors - Update with different colors (idempotency)
+# ============================================================================
+print("\n" + "=" * 80)
+print("TEST 26: PUT /api/settings/colors - Update with different colors (idempotency)")
+print("=" * 80)
+
+if admin_token:
+    try:
+        headers = {"Authorization": f"Bearer {admin_token}"}
+        payload = {
+            "colors": [
+                {"name": "Lila", "hex": "#9333ea"},
+                {"name": "Türkis", "hex": "#14b8a6"},
+                {"name": "Pink", "hex": "#ec4899"}
+            ]
+        }
+        
+        response = requests.put(f"{BASE_URL}/settings/colors", json=payload, headers=headers, timeout=10)
+        print(f"Status Code: {response.status_code}")
+        
+        if response.status_code == 200:
+            data = response.json()
+            
+            if "colors" in data and len(data["colors"]) == 3:
+                log_pass("PUT /api/settings/colors - Overwrites previous colors (3 new colors)")
+                
+                names = [c.get("name") for c in data["colors"]]
+                if "Lila" in names and "Türkis" in names and "Pink" in names:
+                    log_pass("PUT /api/settings/colors - New colors saved correctly")
+                else:
+                    log_fail("PUT /api/settings/colors - New colors", f"Expected Lila, Türkis, Pink, got {names}")
+            else:
+                log_fail("PUT /api/settings/colors - Overwrite", f"Expected 3 colors, got {len(data.get('colors', []))}")
+            
+            log_pass("PUT /api/settings/colors - Idempotency test (200 OK)")
+        else:
+            log_fail("PUT /api/settings/colors - Idempotency", f"Expected 200, got {response.status_code}: {response.text}")
+            
+    except Exception as e:
+        log_fail("PUT /api/settings/colors - Idempotency", f"Exception: {str(e)}")
+else:
+    log_fail("PUT /api/settings/colors - Idempotency", "No admin token available")
+
+# ============================================================================
 # SUMMARY
 # ============================================================================
 print("\n" + "=" * 80)
