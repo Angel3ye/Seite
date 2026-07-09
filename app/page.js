@@ -93,7 +93,7 @@ function Header({ view, setView }) {
           <div className="grid place-items-center h-9 w-9 rounded-xl bg-gradient-to-br from-primary to-accent shadow-lg shadow-primary/20">
             <Printer className="h-5 w-5 text-primary-foreground" />
           </div>
-          <span className="font-bold text-lg tracking-tight">3D Druck <span className="text-primary">Service</span></span>
+          <span className="font-bold text-lg tracking-tight">Janniks 3D-Druck <span className="text-primary">Service</span></span>
         </button>
         <nav className="flex items-center gap-1">
           {nav.map((n) => (
@@ -832,7 +832,7 @@ export default function App() {
         <div className="container text-center text-sm text-muted-foreground">
           <div className="flex items-center justify-center gap-2 mb-2">
             <Printer className="h-4 w-4 text-primary" />
-            <span className="font-semibold text-foreground">3D Druck Service</span>
+            <span className="font-semibold text-foreground">Janniks 3D-Druck Service</span>
           </div>
           Privates Auftragsportal · nur für Familie, Freunde &amp; Bekannte
         </div>

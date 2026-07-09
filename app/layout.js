@@ -2,7 +2,7 @@ import './globals.css'
 import { Providers } from './providers'
 
 export const metadata = {
-  title: '3D Druck Service',
+  title: 'Janniks 3D-Druck Service',
   description: 'Privater 3D-Druck-Service - sende ganz einfach deinen Druckauftrag.',
 }
 
