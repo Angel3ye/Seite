@@ -223,6 +223,13 @@ function HomeView({ setView, setLastOrder }) {
           Hier kannst du mir ganz einfach einen Druckauftrag senden. Suche dir auf MakerWorld ein Modell aus,
           kopiere den Link und sende ihn mir.
         </p>
+        <div className="mt-6">
+          <a href="https://makerworld.com/de/3d-models" target="_blank" rel="noreferrer">
+            <Button variant="secondary" size="lg" className="gap-2">
+              <ExternalLink className="h-4 w-4" /> Modelle auf MakerWorld entdecken
+            </Button>
+          </a>
+        </div>
       </motion.div>
 
       {/* Formular */}
@@ -241,7 +248,12 @@ function HomeView({ setView, setLastOrder }) {
 
             {/* MakerWorld-Link */}
             <div className="space-y-2">
-              <Label>MakerWorld-Link</Label>
+              <div className="flex items-center justify-between gap-2">
+                <Label>MakerWorld-Link</Label>
+                <a href="https://makerworld.com/de/3d-models" target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs text-accent hover:underline">
+                  <ExternalLink className="h-3 w-3" /> Modelle durchsuchen
+                </a>
+              </div>
               <Input
                 placeholder="https://makerworld.com/de/models/..."
                 value={form.makerworldLink}
