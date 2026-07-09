@@ -217,26 +217,53 @@ frontend:
     file: "app/page.js"
     stuck_count: 0
     priority: "high"
-    needs_retesting: false
+    needs_retesting: true
     status_history:
         -working: "NA"
         -agent: "main"
-        -comment: "Noch nicht per Testagent getestet (wartet auf User-Freigabe)."
+        -comment: "Formular ausfuellen und absenden -> Erfolgsdialog mit Auftragsnummer + Kundencode. Live-Preis aktualisiert sich bei Groesse/Anzahl/Prioritaet."
+
+  - task: "Status-Tracking per Kundencode"
+    implemented: true
+    working: "NA"
+    file: "app/page.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "Code eingeben -> Statusanzeige mit Stepper. 'Status pruefen' Button im Erfolgsdialog uebernimmt den Code automatisch."
+
+  - task: "Admin-Login + Dashboard (Status aendern, bearbeiten, loeschen, Fotos)"
+    implemented: true
+    working: "NA"
+    file: "app/page.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "Login admin/Admin123!. Dashboard zeigt Auftraege, Status per Dropdown aenderbar, Details-Dialog fuer Bearbeitung/Fotos/Notizen, Loeschen mit Bestaetigung."
 
 metadata:
   created_by: "main_agent"
   version: "1.0"
   test_sequence: 1
-  run_ui: false
+  run_ui: true
 
 test_plan:
-  current_focus: []
+  current_focus:
+    - "Startseite + Auftragsformular + Live-Preis + Erfolgsdialog"
+    - "Status-Tracking per Kundencode"
+    - "Admin-Login + Dashboard (Status aendern, bearbeiten, loeschen, Fotos)"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
 
 agent_communication:
     -agent: "main"
-    -message: "Bitte alle Backend-Endpunkte testen. Admin-Zugang: username=admin, password=Admin123!. Token aus Login als 'Authorization: Bearer <token>' verwenden. Wichtig: Preisformel = (grams*0.03 + hours*2.0 + 1.5*qty) * 1.20, bei Eilig zusaetzlich *1.25. Standard grams=25, hours=2 bei 100%. Fuer makerworld-preview reicht es zu pruefen, dass ungueltige URL kein 500 wirft (ok:false) - echtes Scraping ist best-effort. Voller CRUD-Flow: Auftrag anlegen -> customerCode -> track -> login -> list -> update status -> delete."
+    -message: "Backend bereits vollstaendig getestet (39/39). Jetzt Frontend-Test gewuenscht. Admin-Login: admin/Admin123!."
     -agent: "testing"
     -message: "✅ ALL BACKEND TESTS PASSED (39/39). Comprehensive testing completed: Order creation (Normal/Eilig with price verification), validation, tracking, admin login, order listing, updates (status/quantity/photos with price recalculation), deletion, and MakerWorld preview. All authentication checks working. No MongoDB _id leaks. Price formula verified. Ready for user acceptance."
