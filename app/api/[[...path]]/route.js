@@ -8,15 +8,23 @@ import { NextResponse } from 'next/server'
 // Verbindung geoeffnet wird)
 // =============================================================
 async function connectToMongo() {
+  if (!process.env.MONGO_URL) {
+    throw new Error('MONGO_URL ist nicht gesetzt (Umgebungsvariable fehlt auf dem Server).')
+  }
   const g = globalThis
   if (!g._mongoClientPromise) {
     const client = new MongoClient(process.env.MONGO_URL)
-    g._mongoClientPromise = client.connect()
+    // Bei Verbindungsfehler das (fehlgeschlagene) Promise nicht dauerhaft
+    // cachen, damit ein spaeterer Versuch erneut verbinden kann.
+    g._mongoClientPromise = client.connect().catch((err) => {
+      g._mongoClientPromise = undefined
+      throw err
+    })
   }
   const client = await g._mongoClientPromise
   // Wenn DB_NAME nicht gesetzt ist, wird die Datenbank aus dem
-  // Connection-String verwendet.
-  return client.db(process.env.DB_NAME || undefined)
+  // Connection-String verwendet (Fallback: '3d_druck_service').
+  return client.db(process.env.DB_NAME || '3d_druck_service')
 }
 
 // =============================================================
