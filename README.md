@@ -63,6 +63,7 @@ git push -u origin main
    | `ADMIN_USERNAME` | `admin`                                                |
    | `ADMIN_PASSWORD` | *(dein sicheres Passwort)*                             |
    | `CORS_ORIGINS`   | `*`                                                    |
+   | `FIRECRAWL_API_KEY` | `fc-...` *(optional, für MakerWorld-Auto-Vorschau)* |
 
 4. Auf **Deploy** klicken. Fertig! 🎉
    Vercel baut die App automatisch (`next build`) und vergibt eine öffentliche URL.

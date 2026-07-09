@@ -139,6 +139,43 @@ async function fetchMakerworldPreview(url) {
     filamentGrams: null,
     url,
   }
+
+  // Titel von MakerWorld-Zusaetzen befreien
+  const cleanTitle = (t) => {
+    if (!t) return t
+    return t
+      .replace(/\s*[-–|]\s*Free 3D Print Model\s*[-–|]\s*MakerWorld\s*$/i, '')
+      .replace(/\s*[-–|]\s*MakerWorld\s*$/i, '')
+      .trim()
+  }
+
+  // 1) Bevorzugt: Firecrawl (umgeht Cloudflare, rendert JavaScript)
+  const key = process.env.FIRECRAWL_API_KEY
+  if (key) {
+    try {
+      const res = await fetch('https://api.firecrawl.dev/v1/scrape', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url, formats: ['html'], waitFor: 6000 }),
+      })
+      const data = await res.json()
+      const m = (data && data.data && data.data.metadata) || {}
+      const title = cleanTitle(m.ogTitle || m.title)
+      const image = m.ogImage || null
+      const description = m.ogDescription || m.description || null
+      if (title || image) {
+        result.modelName = title || null
+        result.image = image
+        result.description = description
+        result.ok = true
+        return result
+      }
+    } catch (e) {
+      // Faellt unten auf einfachen Abruf zurueck
+    }
+  }
+
+  // 2) Fallback: einfacher Abruf + OG-Meta (funktioniert oft nicht wegen Cloudflare)
   try {
     const res = await fetch(url, {
       headers: {
@@ -151,21 +188,9 @@ async function fetchMakerworldPreview(url) {
     if (!res.ok) return result
     const html = await res.text()
 
-    result.modelName = metaContent(html, 'og:title') || metaContent(html, 'twitter:title')
+    result.modelName = cleanTitle(metaContent(html, 'og:title') || metaContent(html, 'twitter:title'))
     result.image = metaContent(html, 'og:image') || metaContent(html, 'twitter:image')
     result.description = metaContent(html, 'og:description') || metaContent(html, 'description')
-
-    // Best-effort: Druckzeit & Filament aus dem HTML/JSON extrahieren
-    const timeMatch = html.match(/\"(?:predictionTime|printTime|estimatedTime)\"\s*:\s*(\d+)/i)
-    if (timeMatch) {
-      const seconds = parseInt(timeMatch[1], 10)
-      // Werte koennen in Sekunden oder Minuten vorliegen -> heuristisch in Stunden
-      result.printTime = seconds > 10000 ? +(seconds / 3600).toFixed(1) + 'h' : +(seconds / 60).toFixed(1) + 'h'
-    }
-    const filaMatch = html.match(/\"(?:weight|filamentWeight|materialWeight)\"\s*:\s*([\d.]+)/i)
-    if (filaMatch) {
-      result.filamentGrams = Math.round(parseFloat(filaMatch[1]))
-    }
 
     result.ok = !!(result.modelName || result.image)
     return result
