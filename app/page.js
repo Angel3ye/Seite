@@ -191,38 +191,6 @@ function HomeView({ setView, setLastOrder }) {
 
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }))
 
-  const [preview, setPreview] = useState(null)
-  const [previewLoading, setPreviewLoading] = useState(false)
-
-  // Modellinfos automatisch von MakerWorld laden (via Firecrawl im Backend)
-  const loadPreview = useCallback(async (url) => {
-    if (!url || !/^https?:\/\//i.test(url)) return
-    setPreviewLoading(true)
-    try {
-      const res = await fetch('/api/makerworld-preview', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url }),
-      })
-      const data = await res.json()
-      if (data.ok) {
-        setPreview(data)
-        // Filament & Druckzeit automatisch uebernehmen (bleiben editierbar)
-        setManual((m) => ({
-          grams: data.filamentGrams ? String(data.filamentGrams) : m.grams,
-          hours: data.printHours ? String(data.printHours) : m.hours,
-        }))
-        toast.success('Modellinfos geladen')
-      } else {
-        setPreview(null)
-        toast.message('Konnte nicht automatisch gelesen werden', { description: 'Der Link wird trotzdem gespeichert.' })
-      }
-    } catch (e) {
-      setPreview(null)
-    } finally {
-      setPreviewLoading(false)
-    }
-  }, [])
-
   const hasDetails = !!(manual.grams || manual.hours)
 
   const price = useMemo(() => calcPrice({
@@ -235,17 +203,16 @@ function HomeView({ setView, setLastOrder }) {
     if (!/^https?:\/\//i.test(form.makerworldLink)) return toast.error('Bitte gib einen gültigen MakerWorld-Link an.')
     setSubmitting(true)
     try {
-      const model = {
-        modelName: preview?.modelName || undefined,
-        image: preview?.image || undefined,
-        description: preview?.description || undefined,
-        filamentGrams: Number(manual.grams) || undefined,
-        printHours: Number(manual.hours) || undefined,
-      }
-      const hasModelData = Object.values(model).some((v) => v !== undefined)
+      const model = (manual.grams || manual.hours)
+        ? {
+            manual: true,
+            filamentGrams: Number(manual.grams) || undefined,
+            printHours: Number(manual.hours) || undefined,
+          }
+        : null
       const res = await fetch('/api/orders', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...form, model: hasModelData ? model : null }),
+        body: JSON.stringify({ ...form, model }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Fehler')
@@ -302,19 +269,12 @@ function HomeView({ setView, setLastOrder }) {
                   <ExternalLink className="h-3 w-3" /> Modelle durchsuchen
                 </a>
               </div>
-              <div className="flex gap-2">
-                <Input
-                  placeholder="https://makerworld.com/de/models/..."
-                  value={form.makerworldLink}
-                  onChange={(e) => set('makerworldLink', e.target.value)}
-                  onBlur={(e) => loadPreview(e.target.value)}
-                />
-                <Button type="button" variant="secondary" onClick={() => loadPreview(form.makerworldLink)} disabled={previewLoading}>
-                  {previewLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
-                </Button>
-              </div>
-              <p className="text-xs text-muted-foreground">Beim Einfügen des Links werden Modellname, Bild &amp; Beschreibung automatisch geladen. Der Link wird in jedem Fall gespeichert.</p>
-              <PreviewCard preview={preview} loading={previewLoading} />
+              <Input
+                placeholder="https://makerworld.com/de/models/..."
+                value={form.makerworldLink}
+                onChange={(e) => set('makerworldLink', e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">Füge einfach den MakerWorld-Link ein – er wird gespeichert.</p>
               <div className="grid sm:grid-cols-2 gap-3 rounded-lg border border-border bg-muted/20 p-3">
                 <div className="sm:col-span-2 text-xs font-medium text-muted-foreground">Filament &amp; Druckzeit (von der MakerWorld-Seite)</div>
                 <div className="space-y-1.5">
@@ -616,8 +576,6 @@ function AdminView() {
   const [editing, setEditing] = useState(null)
   const [colors, setColors] = useState([])
   const [savingColors, setSavingColors] = useState(false)
-  const [printer, setPrinter] = useState('')
-  const [savingPrinter, setSavingPrinter] = useState(false)
 
   useEffect(() => {
     const t = typeof window !== 'undefined' ? localStorage.getItem('admin_token') : null
@@ -667,32 +625,6 @@ function AdminView() {
   }, [])
 
   useEffect(() => { if (token) loadColors() }, [token, loadColors])
-
-  // --- Drucker-Einstellung ---
-  const loadPrinter = useCallback(async () => {
-    if (!token) return
-    try {
-      const res = await fetch('/api/settings/printer', { headers: { Authorization: `Bearer ${token}` } })
-      const data = await res.json()
-      if (res.ok) setPrinter(data.printer || '')
-    } catch (e) { /* ignore */ }
-  }, [token])
-
-  useEffect(() => { if (token) loadPrinter() }, [token, loadPrinter])
-
-  const savePrinter = async () => {
-    setSavingPrinter(true)
-    try {
-      const res = await fetch('/api/settings/printer', {
-        method: 'PUT', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ printer }),
-      })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Fehler')
-      setPrinter(data.printer)
-      toast.success('Drucker gespeichert')
-    } catch (e) { toast.error(e.message) } finally { setSavingPrinter(false) }
-  }
 
   const setColorField = (i, key, val) => setColors((cs) => cs.map((c, j) => (j === i ? { ...c, [key]: val } : c)))
   const addColor = () => setColors((cs) => [...cs, { name: '', hex: '#8b5cf6' }])
@@ -791,23 +723,6 @@ function AdminView() {
           </div>
         ))}
       </div>
-
-      {/* Drucker-Einstellung */}
-      <Card className="glass-card mb-6">
-        <CardHeader className="pb-3">
-          <CardTitle className="flex items-center gap-2 text-base"><Printer className="h-5 w-5 text-primary" /> Mein Drucker</CardTitle>
-          <CardDescription>Damit Druckzeit &amp; Filament automatisch vom passenden MakerWorld-Druckprofil übernommen werden.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="flex flex-col sm:flex-row gap-2">
-            <Input placeholder="z. B. Bambu Lab P1S" value={printer} onChange={(e) => setPrinter(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && savePrinter()} />
-            <Button onClick={savePrinter} disabled={savingPrinter} className="gap-1 shrink-0">
-              {savingPrinter ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} Speichern
-            </Button>
-          </div>
-          <p className="mt-2 text-xs text-muted-foreground">Leer lassen = es wird das erste/Standard-Druckprofil verwendet.</p>
-        </CardContent>
-      </Card>
 
       {/* Farbverwaltung */}
       <Card className="glass-card mb-6">
