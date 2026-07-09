@@ -172,18 +172,27 @@ function HomeView({ setView, setLastOrder }) {
     material: 'PLA', size: 100, quantity: 1, priority: 'Normal', notes: '',
   })
   const [submitting, setSubmitting] = useState(false)
-  const [manual, setManual] = useState({ modelName: '', image: '' })
+  const [manual, setManual] = useState({ modelName: '', image: '', grams: '', hours: '' })
 
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }))
 
-  const price = useMemo(() => calcPrice({
-    size: form.size, quantity: form.quantity, priority: form.priority,
-  }), [form.size, form.quantity, form.priority])
+  const hasDetails = !!(manual.grams || manual.hours)
 
-  // Optionale manuelle Vorschau (Modellname/Bild) - kein automatischer Abruf noetig
+  const price = useMemo(() => calcPrice({
+    grams: manual.grams, hours: manual.hours,
+    size: form.size, quantity: form.quantity, priority: form.priority,
+  }), [manual.grams, manual.hours, form.size, form.quantity, form.priority])
+
+  // Optionale manuelle Vorschau (Modellname/Bild/Daten) - kein automatischer Abruf noetig
   const manualPreview = useMemo(() => (
-    (manual.modelName || manual.image)
-      ? { modelName: manual.modelName || 'Modell', image: manual.image, description: '' }
+    (manual.modelName || manual.image || manual.grams || manual.hours)
+      ? {
+          modelName: manual.modelName || 'Modell',
+          image: manual.image,
+          description: '',
+          filamentGrams: manual.grams ? Number(manual.grams) : null,
+          printTime: manual.hours ? `${manual.hours} h` : null,
+        }
       : null
   ), [manual])
 
@@ -192,8 +201,12 @@ function HomeView({ setView, setLastOrder }) {
     if (!/^https?:\/\//i.test(form.makerworldLink)) return toast.error('Bitte gib einen gültigen MakerWorld-Link an.')
     setSubmitting(true)
     try {
-      const model = (manual.modelName || manual.image)
-        ? { modelName: manual.modelName, image: manual.image, description: '', manual: true }
+      const model = (manual.modelName || manual.image || manual.grams || manual.hours)
+        ? {
+            modelName: manual.modelName, image: manual.image, description: '', manual: true,
+            filamentGrams: Number(manual.grams) || undefined,
+            printHours: Number(manual.hours) || undefined,
+          }
         : null
       const res = await fetch('/api/orders', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -249,9 +262,12 @@ function HomeView({ setView, setLastOrder }) {
               />
               <p className="text-xs text-muted-foreground">Füge einfach den MakerWorld-Link ein – er wird gespeichert. Optional kannst du Modellname und ein Vorschaubild ergänzen.</p>
               <div className="grid sm:grid-cols-2 gap-3 rounded-lg border border-border bg-muted/20 p-3">
-                <div className="sm:col-span-2 text-xs font-medium text-muted-foreground">Optional: Modelldetails</div>
+                <div className="sm:col-span-2 text-xs font-medium text-muted-foreground">Optional: Modelldetails (für einen genaueren Preis)</div>
                 <Input placeholder="Modellname (optional)" value={manual.modelName} onChange={(e) => setManual((m) => ({ ...m, modelName: e.target.value }))} />
                 <Input placeholder="Bild-URL (optional)" value={manual.image} onChange={(e) => setManual((m) => ({ ...m, image: e.target.value }))} />
+                <Input type="number" min={0} placeholder="Filament in g (optional)" value={manual.grams} onChange={(e) => setManual((m) => ({ ...m, grams: e.target.value }))} />
+                <Input type="number" min={0} step="0.5" placeholder="Druckzeit in Std. (optional)" value={manual.hours} onChange={(e) => setManual((m) => ({ ...m, hours: e.target.value }))} />
+                <div className="sm:col-span-2 text-xs text-muted-foreground">Filament &amp; Druckzeit findest du direkt auf der MakerWorld-Seite. Trägst du sie ein, wird der Preis deutlich genauer.</div>
               </div>
               <PreviewCard preview={manualPreview} loading={false} />
             </div>
@@ -348,7 +364,7 @@ function HomeView({ setView, setLastOrder }) {
                 <div className="rounded-md bg-background/40 p-2 text-center">Druckzeit<br /><span className="text-foreground font-medium">{eur(price.time)}</span></div>
                 <div className="rounded-md bg-background/40 p-2 text-center">Verschleiß<br /><span className="text-foreground font-medium">{eur(price.wear)}</span></div>
               </div>
-              <p className="mt-3 text-xs text-muted-foreground">Der endgültige Preis wird nach Prüfung des Modells bestätigt.</p>
+              <p className="mt-3 text-xs text-muted-foreground">{hasDetails ? '' : 'Grobe Schätzung ohne genaue Modelldaten (Standardannahme ~25 g / 2 Std.). '}Der endgültige Preis wird nach Prüfung des Modells bestätigt.</p>
             </div>
 
             <Button className="w-full gap-2 h-12 text-base" onClick={submit} disabled={submitting}>
