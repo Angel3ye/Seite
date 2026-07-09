@@ -52,9 +52,9 @@ export async function OPTIONS() {
 // =============================================================
 function calcPrice({ grams, hours, size = 100, quantity = 1, priority = 'Normal' }) {
   const MAT_PER_G = 0.03      // Materialkosten pro Gramm
-  const TIME_PER_H = 2.0      // Druckzeitkosten pro Stunde
-  const WEAR = 1.5            // Verschleisspauschale pro Stueck
-  const PROFIT = 0.20         // 20% Gewinn auf den Gesamtpreis
+  const TIME_PER_H = 1.5      // Druckzeitkosten pro Stunde
+  const WEAR = 1.0            // Verschleisspauschale pro Stueck
+  const PROFIT = 0.05         // 5% Gewinn auf den Gesamtpreis
   const RUSH = 0.25           // 25% Eilzuschlag
 
   const qty = Math.max(1, Number(quantity) || 1)
