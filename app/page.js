@@ -143,7 +143,7 @@ function PreviewCard({ preview, loading }) {
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1">
             <Sparkles className="h-4 w-4 text-primary" />
-            <span className="text-xs font-medium text-primary">Automatisch erkannt</span>
+            <span className="text-xs font-medium text-primary">Vorschau</span>
           </div>
           <h4 className="font-semibold truncate">{preview.modelName || 'Unbekanntes Modell'}</h4>
           {preview.description && (
@@ -171,53 +171,30 @@ function HomeView({ setView, setLastOrder }) {
     name: '', makerworldLink: '', color: 'Egal / Überrasch mich',
     material: 'PLA', size: 100, quantity: 1, priority: 'Normal', notes: '',
   })
-  const [preview, setPreview] = useState(null)
-  const [previewLoading, setPreviewLoading] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [manual, setManual] = useState({ modelName: '', image: '' })
-  const [showManual, setShowManual] = useState(false)
 
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }))
 
   const price = useMemo(() => calcPrice({
-    grams: preview?.filamentGrams,
     size: form.size, quantity: form.quantity, priority: form.priority,
-  }), [preview, form.size, form.quantity, form.priority])
+  }), [form.size, form.quantity, form.priority])
 
-  const loadPreview = useCallback(async (url) => {
-    if (!url || !/^https?:\/\//i.test(url)) return
-    setPreviewLoading(true)
-    try {
-      const res = await fetch('/api/makerworld-preview', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url }),
-      })
-      const data = await res.json()
-      if (data.ok) {
-        setPreview(data)
-        setShowManual(false)
-        toast.success('Modellinformationen geladen')
-      } else {
-        setPreview(null)
-        setShowManual(true)
-        toast.message('Automatisch nicht lesbar', { description: 'Kein Problem – der Link wird gespeichert. Du kannst Modellname und Bild manuell ergänzen.' })
-      }
-    } catch (e) {
-      setPreview(null)
-      setShowManual(true)
-    } finally {
-      setPreviewLoading(false)
-    }
-  }, [])
+  // Optionale manuelle Vorschau (Modellname/Bild) - kein automatischer Abruf noetig
+  const manualPreview = useMemo(() => (
+    (manual.modelName || manual.image)
+      ? { modelName: manual.modelName || 'Modell', image: manual.image, description: '' }
+      : null
+  ), [manual])
 
   const submit = async () => {
     if (!form.name.trim()) return toast.error('Bitte gib deinen Namen an.')
     if (!/^https?:\/\//i.test(form.makerworldLink)) return toast.error('Bitte gib einen gültigen MakerWorld-Link an.')
     setSubmitting(true)
     try {
-      const model = preview || (showManual && (manual.modelName || manual.image)
+      const model = (manual.modelName || manual.image)
         ? { modelName: manual.modelName, image: manual.image, description: '', manual: true }
-        : null)
+        : null
       const res = await fetch('/api/orders', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...form, model }),
@@ -265,25 +242,18 @@ function HomeView({ setView, setLastOrder }) {
             {/* MakerWorld-Link */}
             <div className="space-y-2">
               <Label>MakerWorld-Link</Label>
-              <div className="flex gap-2">
-                <Input
-                  placeholder="https://makerworld.com/de/models/..."
-                  value={form.makerworldLink}
-                  onChange={(e) => set('makerworldLink', e.target.value)}
-                  onBlur={(e) => loadPreview(e.target.value)}
-                />
-                <Button type="button" variant="secondary" onClick={() => loadPreview(form.makerworldLink)} disabled={previewLoading}>
-                  {previewLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
-                </Button>
+              <Input
+                placeholder="https://makerworld.com/de/models/..."
+                value={form.makerworldLink}
+                onChange={(e) => set('makerworldLink', e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">Füge einfach den MakerWorld-Link ein – er wird gespeichert. Optional kannst du Modellname und ein Vorschaubild ergänzen.</p>
+              <div className="grid sm:grid-cols-2 gap-3 rounded-lg border border-border bg-muted/20 p-3">
+                <div className="sm:col-span-2 text-xs font-medium text-muted-foreground">Optional: Modelldetails</div>
+                <Input placeholder="Modellname (optional)" value={manual.modelName} onChange={(e) => setManual((m) => ({ ...m, modelName: e.target.value }))} />
+                <Input placeholder="Bild-URL (optional)" value={manual.image} onChange={(e) => setManual((m) => ({ ...m, image: e.target.value }))} />
               </div>
-              <PreviewCard preview={preview} loading={previewLoading} />
-              {showManual && !preview && (
-                <div className="grid sm:grid-cols-2 gap-3 rounded-lg border border-border bg-muted/20 p-3">
-                  <div className="sm:col-span-2 text-xs text-muted-foreground">Optional: Modellname &amp; Vorschaubild-Link manuell ergänzen</div>
-                  <Input placeholder="Modellname" value={manual.modelName} onChange={(e) => setManual((m) => ({ ...m, modelName: e.target.value }))} />
-                  <Input placeholder="Bild-URL (optional)" value={manual.image} onChange={(e) => setManual((m) => ({ ...m, image: e.target.value }))} />
-                </div>
-              )}
+              <PreviewCard preview={manualPreview} loading={false} />
             </div>
 
             {/* Farbe + Material */}
