@@ -16,7 +16,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import {
-  Select, SelectTrigger, SelectValue, SelectContent, SelectItem
+  Select, SelectTrigger, SelectValue, SelectContent, SelectItem, SelectGroup, SelectLabel
 } from '@/components/ui/select'
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter
@@ -42,6 +42,46 @@ const COLORS = [
   { name: 'Egal / Überrasch mich', hex: 'linear-gradient(135deg,#16a34a,#2563eb)' },
 ]
 const MATERIALS = ['PLA', 'PETG', 'TPU']
+
+// Offizielle Bambu Lab Farben (PLA Basic + PLA Matte) fuer die Admin-Auswahl
+const BAMBU_GROUPS = [
+  {
+    label: 'PLA Basic', finish: 'Basic', colors: [
+      { name: 'Jade White', hex: '#F5F5F5' }, { name: 'Beige', hex: '#F7E6DE' },
+      { name: 'Gold', hex: '#E4BD68' }, { name: 'Silver', hex: '#A6A9AA' },
+      { name: 'Gray', hex: '#8E9089' }, { name: 'Bronze', hex: '#847D48' },
+      { name: 'Brown', hex: '#9D432C' }, { name: 'Cocoa Brown', hex: '#6F5034' },
+      { name: 'Maroon Red', hex: '#9D2235' }, { name: 'Red', hex: '#C12E1F' },
+      { name: 'Magenta', hex: '#EC008C' }, { name: 'Pink', hex: '#F55A74' },
+      { name: 'Hot Pink', hex: '#F5547C' }, { name: 'Orange', hex: '#FF6A13' },
+      { name: 'Pumpkin Orange', hex: '#FF9016' }, { name: 'Sunflower Yellow', hex: '#FEC600' },
+      { name: 'Yellow', hex: '#F4EE2A' }, { name: 'Bright Green', hex: '#BECF00' },
+      { name: 'Bambu Green', hex: '#00AE42' }, { name: 'Mistletoe Green', hex: '#3F8E43' },
+      { name: 'Turquoise', hex: '#00B1B7' }, { name: 'Cyan', hex: '#0086D6' },
+      { name: 'Blue', hex: '#0A2989' }, { name: 'Cobalt Blue', hex: '#0056B8' },
+      { name: 'Purple', hex: '#5E43B7' }, { name: 'Indigo Purple', hex: '#482960' },
+      { name: 'Blue Gray', hex: '#5B6579' }, { name: 'Light Gray', hex: '#D1D3D5' },
+      { name: 'Dark Gray', hex: '#545454' }, { name: 'Black', hex: '#000000' },
+    ],
+  },
+  {
+    label: 'PLA Matte', finish: 'Matte', colors: [
+      { name: 'Ivory White', hex: '#F3F1E9' }, { name: 'Bone White', hex: '#CBC6B8' },
+      { name: 'Desert Tan', hex: '#E8DBB7' }, { name: 'Latte Brown', hex: '#D3B7A7' },
+      { name: 'Caramel', hex: '#AE835B' }, { name: 'Terracotta', hex: '#B15533' },
+      { name: 'Dark Brown', hex: '#7D6556' }, { name: 'Dark Red', hex: '#D84B2E' },
+      { name: 'Scarlet Red', hex: '#ED2F2E' }, { name: 'Lemon Yellow', hex: '#F7D959' },
+      { name: 'Mandarin Orange', hex: '#F99963' }, { name: 'Dark Green', hex: '#68724D' },
+      { name: 'Grass Green', hex: '#61C680' }, { name: 'Ice Blue', hex: '#A3D8E1' },
+      { name: 'Marine Blue', hex: '#12507E' }, { name: 'Dark Blue', hex: '#395064' },
+      { name: 'Charcoal', hex: '#464B4E' }, { name: 'Ash Gray', hex: '#9B9EA0' },
+    ],
+  },
+]
+// Flache Liste: Anzeigename inkl. Oberflaeche -> {name, hex}
+const BAMBU_ALL = BAMBU_GROUPS.flatMap((g) =>
+  g.colors.map((c) => ({ name: `${c.name} (${g.finish})`, hex: c.hex }))
+)
 const SIZES = [50, 75, 100, 125, 150, 200]
 const PRIORITIES = ['Normal', 'Eilig']
 const STATUS_STEPS = ['Eingegangen', 'In Prüfung', 'Druck läuft', 'Fertig', 'Abholbereit', 'Abgeschlossen']
@@ -626,9 +666,12 @@ function AdminView() {
 
   useEffect(() => { if (token) loadColors() }, [token, loadColors])
 
-  const setColorField = (i, key, val) => setColors((cs) => cs.map((c, j) => (j === i ? { ...c, [key]: val } : c)))
-  const addColor = () => setColors((cs) => [...cs, { name: '', hex: '#8b5cf6' }])
   const removeColor = (i) => setColors((cs) => cs.filter((_, j) => j !== i))
+  const addBambuColor = (displayName) => {
+    const found = BAMBU_ALL.find((c) => c.name === displayName)
+    if (!found) return
+    setColors((cs) => (cs.some((c) => c.name === found.name) ? cs : [...cs, found]))
+  }
   const saveColors = async () => {
     const clean = colors.filter((c) => c.name && c.name.trim())
     setSavingColors(true)
@@ -729,35 +772,55 @@ function AdminView() {
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between gap-2 flex-wrap">
             <CardTitle className="flex items-center gap-2 text-base"><Palette className="h-5 w-5 text-primary" /> Verfügbare Farben</CardTitle>
-            <div className="flex gap-2">
-              <Button size="sm" variant="secondary" onClick={addColor} className="gap-1"><Plus className="h-4 w-4" /> Farbe</Button>
-              <Button size="sm" onClick={saveColors} disabled={savingColors} className="gap-1">
-                {savingColors ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} Speichern
-              </Button>
-            </div>
+            <Button size="sm" onClick={saveColors} disabled={savingColors} className="gap-1">
+              {savingColors ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} Speichern
+            </Button>
           </div>
-          <CardDescription>Lege fest, welche Filament-Farben Kunden im Formular auswählen können.</CardDescription>
+          <CardDescription>Wähle aus den offiziellen Bambu-Lab-Farben (PLA Basic &amp; PLA Matte) die aus, die du auf Lager hast.</CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
+          {/* Dropdown zum Hinzufügen */}
+          <Select value="" onValueChange={addBambuColor}>
+            <SelectTrigger className="w-full sm:w-80">
+              <span className="flex items-center gap-2 text-muted-foreground"><Plus className="h-4 w-4" /> Bambu-Lab-Farbe hinzufügen…</span>
+            </SelectTrigger>
+            <SelectContent className="max-h-80">
+              {BAMBU_GROUPS.map((g) => (
+                <SelectGroup key={g.finish}>
+                  <SelectLabel>{g.label}</SelectLabel>
+                  {g.colors.map((c) => {
+                    const display = `${c.name} (${g.finish})`
+                    return (
+                      <SelectItem key={display} value={display} disabled={colors.some((x) => x.name === display)}>
+                        <span className="flex items-center gap-2">
+                          <span className="h-4 w-4 rounded-full border border-border" style={{ background: c.hex }} />
+                          {c.name}
+                        </span>
+                      </SelectItem>
+                    )
+                  })}
+                </SelectGroup>
+              ))}
+            </SelectContent>
+          </Select>
+
+          {/* Ausgewählte Farben */}
           {colors.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Noch keine Farben. Füge mit „+ Farbe" welche hinzu.</p>
+            <p className="text-sm text-muted-foreground">Noch keine Farben ausgewählt. Nutze das Dropdown oben.</p>
           ) : (
-            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            <div className="flex flex-wrap gap-2">
               {colors.map((c, i) => (
-                <div key={i} className="flex items-center gap-2 rounded-lg border border-border bg-muted/20 p-2">
-                  <input
-                    type="color"
-                    value={/^#[0-9a-fA-F]{6}$/.test(c.hex) ? c.hex : '#888888'}
-                    onChange={(e) => setColorField(i, 'hex', e.target.value)}
-                    className="h-9 w-10 shrink-0 cursor-pointer rounded border border-border bg-transparent"
-                    title="Farbe wählen"
-                  />
-                  <Input value={c.name} placeholder="Farbname" onChange={(e) => setColorField(i, 'name', e.target.value)} className="h-9" />
-                  <Button size="icon" variant="ghost" className="text-destructive shrink-0" onClick={() => removeColor(i)}><Trash2 className="h-4 w-4" /></Button>
-                </div>
+                <span key={i} className="inline-flex items-center gap-2 rounded-full border border-border bg-muted/30 py-1 pl-2 pr-1 text-sm">
+                  <span className="h-4 w-4 rounded-full border border-border" style={{ background: c.hex }} />
+                  {c.name}
+                  <button onClick={() => removeColor(i)} className="grid h-5 w-5 place-items-center rounded-full hover:bg-destructive/20 text-muted-foreground hover:text-destructive">
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </span>
               ))}
             </div>
           )}
+          <p className="text-xs text-muted-foreground">Nicht vergessen: nach Änderungen auf „Speichern" klicken.</p>
         </CardContent>
       </Card>
 
