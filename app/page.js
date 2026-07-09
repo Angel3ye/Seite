@@ -172,7 +172,7 @@ function HomeView({ setView, setLastOrder }) {
     material: 'PLA', size: 100, quantity: 1, priority: 'Normal', notes: '',
   })
   const [submitting, setSubmitting] = useState(false)
-  const [manual, setManual] = useState({ modelName: '', image: '', grams: '', hours: '' })
+  const [manual, setManual] = useState({ grams: '', hours: '' })
 
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }))
 
@@ -183,27 +183,14 @@ function HomeView({ setView, setLastOrder }) {
     size: form.size, quantity: form.quantity, priority: form.priority,
   }), [manual.grams, manual.hours, form.size, form.quantity, form.priority])
 
-  // Optionale manuelle Vorschau (Modellname/Bild/Daten) - kein automatischer Abruf noetig
-  const manualPreview = useMemo(() => (
-    (manual.modelName || manual.image || manual.grams || manual.hours)
-      ? {
-          modelName: manual.modelName || 'Modell',
-          image: manual.image,
-          description: '',
-          filamentGrams: manual.grams ? Number(manual.grams) : null,
-          printTime: manual.hours ? `${manual.hours} h` : null,
-        }
-      : null
-  ), [manual])
-
   const submit = async () => {
     if (!form.name.trim()) return toast.error('Bitte gib deinen Namen an.')
     if (!/^https?:\/\//i.test(form.makerworldLink)) return toast.error('Bitte gib einen gültigen MakerWorld-Link an.')
     setSubmitting(true)
     try {
-      const model = (manual.modelName || manual.image || manual.grams || manual.hours)
+      const model = (manual.grams || manual.hours)
         ? {
-            modelName: manual.modelName, image: manual.image, description: '', manual: true,
+            manual: true,
             filamentGrams: Number(manual.grams) || undefined,
             printHours: Number(manual.hours) || undefined,
           }
@@ -260,16 +247,19 @@ function HomeView({ setView, setLastOrder }) {
                 value={form.makerworldLink}
                 onChange={(e) => set('makerworldLink', e.target.value)}
               />
-              <p className="text-xs text-muted-foreground">Füge einfach den MakerWorld-Link ein – er wird gespeichert. Optional kannst du Modellname und ein Vorschaubild ergänzen.</p>
+              <p className="text-xs text-muted-foreground">Füge einfach den MakerWorld-Link ein – er wird gespeichert.</p>
               <div className="grid sm:grid-cols-2 gap-3 rounded-lg border border-border bg-muted/20 p-3">
-                <div className="sm:col-span-2 text-xs font-medium text-muted-foreground">Optional: Modelldetails (für einen genaueren Preis)</div>
-                <Input placeholder="Modellname (optional)" value={manual.modelName} onChange={(e) => setManual((m) => ({ ...m, modelName: e.target.value }))} />
-                <Input placeholder="Bild-URL (optional)" value={manual.image} onChange={(e) => setManual((m) => ({ ...m, image: e.target.value }))} />
-                <Input type="number" min={0} placeholder="Filament in g (optional)" value={manual.grams} onChange={(e) => setManual((m) => ({ ...m, grams: e.target.value }))} />
-                <Input type="number" min={0} step="0.5" placeholder="Druckzeit in Std. (optional)" value={manual.hours} onChange={(e) => setManual((m) => ({ ...m, hours: e.target.value }))} />
-                <div className="sm:col-span-2 text-xs text-muted-foreground">Filament &amp; Druckzeit findest du direkt auf der MakerWorld-Seite. Trägst du sie ein, wird der Preis deutlich genauer.</div>
+                <div className="sm:col-span-2 text-xs font-medium text-muted-foreground">Filament &amp; Druckzeit (von der MakerWorld-Seite)</div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Filament in g</Label>
+                  <Input type="number" min={0} placeholder="z. B. 45" value={manual.grams} onChange={(e) => setManual((m) => ({ ...m, grams: e.target.value }))} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Druckzeit in Std.</Label>
+                  <Input type="number" min={0} step="0.5" placeholder="z. B. 3" value={manual.hours} onChange={(e) => setManual((m) => ({ ...m, hours: e.target.value }))} />
+                </div>
+                <div className="sm:col-span-2 text-xs text-muted-foreground">Diese Werte findest du direkt auf der MakerWorld-Seite. Trägst du sie ein, wird der Preis genau berechnet.</div>
               </div>
-              <PreviewCard preview={manualPreview} loading={false} />
             </div>
 
             {/* Farbe + Material */}
