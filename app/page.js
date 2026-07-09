@@ -58,7 +58,7 @@ const STATUS_STYLES = {
 // Preisberechnung (Client-Live-Vorschau, identisch zum Server)
 // =============================================================
 function calcPrice({ grams, hours, size = 100, quantity = 1, priority = 'Normal' }) {
-  const MAT_PER_G = 0.03, TIME_PER_H = 1.5, WEAR = 1.0, PROFIT = 0.05, RUSH = 0.25
+  const MAT_PER_G = 0.019, TIME_PER_H = 1.5, WEAR = 1.0, PROFIT = 0.05, RUSH = 0.25
   const qty = Math.max(1, Number(quantity) || 1)
   const s = (Number(size) || 100) / 100
   const baseGrams = Number(grams) > 0 ? Number(grams) : 25

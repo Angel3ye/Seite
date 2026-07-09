@@ -51,7 +51,7 @@ export async function OPTIONS() {
 // Preis = Materialkosten + Druckzeit + Verschleiss, dann +20% Gewinn
 // =============================================================
 function calcPrice({ grams, hours, size = 100, quantity = 1, priority = 'Normal' }) {
-  const MAT_PER_G = 0.03      // Materialkosten pro Gramm
+  const MAT_PER_G = 0.019     // Materialkosten pro Gramm
   const TIME_PER_H = 1.5      // Druckzeitkosten pro Stunde
   const WEAR = 1.0            // Verschleisspauschale pro Stueck
   const PROFIT = 0.05         // 5% Gewinn auf den Gesamtpreis
