@@ -94,25 +94,25 @@ code {
         --sidebar-ring: 217.2 91.2% 59.8%;
     }
   .dark {
-        --background: 222 47% 5%;
-        --foreground: 210 40% 98%;
-        --card: 222 40% 8%;
-        --card-foreground: 210 40% 98%;
-        --popover: 222 44% 7%;
-        --popover-foreground: 210 40% 98%;
-        --primary: 152 65% 45%;
-        --primary-foreground: 152 80% 6%;
-        --secondary: 217.2 32.6% 15%;
-        --secondary-foreground: 210 40% 98%;
-        --muted: 217.2 32.6% 14%;
-        --muted-foreground: 215 20.2% 65.1%;
-        --accent: 190 80% 42%;
-        --accent-foreground: 190 90% 6%;
+        --background: 258 40% 5%;
+        --foreground: 270 25% 98%;
+        --card: 258 33% 8%;
+        --card-foreground: 270 25% 98%;
+        --popover: 258 36% 7%;
+        --popover-foreground: 270 25% 98%;
+        --primary: 265 75% 62%;
+        --primary-foreground: 0 0% 100%;
+        --secondary: 258 25% 15%;
+        --secondary-foreground: 270 25% 98%;
+        --muted: 258 22% 14%;
+        --muted-foreground: 260 15% 66%;
+        --accent: 290 70% 62%;
+        --accent-foreground: 0 0% 100%;
         --destructive: 0 72% 45%;
         --destructive-foreground: 210 40% 98%;
-        --border: 217.2 32.6% 17.5%;
-        --input: 217.2 32.6% 16%;
-        --ring: 152 65% 45%;
+        --border: 258 25% 18%;
+        --input: 258 25% 16%;
+        --ring: 265 75% 62%;
         --chart-1: 220 70% 50%;
         --chart-2: 160 60% 45%;
         --chart-3: 30 80% 55%;
@@ -140,21 +140,21 @@ code {
     }
 }
 
-/* Dezenter Farbverlauf-Hintergrund für den dunklen Look */
+/* Dezenter Farbverlauf-Hintergrund für den dunklen Look (Lila) */
 .app-bg {
-  background-color: hsl(222 47% 5%);
+  background-color: hsl(258 40% 5%);
   background-image:
-    radial-gradient(60% 55% at 15% 0%, hsla(152, 65%, 45%, 0.14), transparent 60%),
-    radial-gradient(55% 50% at 90% 10%, hsla(190, 80%, 45%, 0.12), transparent 60%);
+    radial-gradient(60% 55% at 15% 0%, hsla(265, 75%, 58%, 0.18), transparent 60%),
+    radial-gradient(55% 50% at 90% 10%, hsla(290, 70%, 58%, 0.15), transparent 60%);
 }
 
 .glass-card {
-  background: linear-gradient(180deg, hsla(222, 40%, 10%, 0.85), hsla(222, 44%, 7%, 0.85));
+  background: linear-gradient(180deg, hsla(258, 33%, 11%, 0.85), hsla(258, 36%, 8%, 0.85));
   backdrop-filter: blur(8px);
 }
 
 /* Schlanke Scrollbar */
 ::-webkit-scrollbar { width: 10px; height: 10px; }
-::-webkit-scrollbar-track { background: hsl(222 44% 7%); }
-::-webkit-scrollbar-thumb { background: hsl(217 32% 20%); border-radius: 8px; }
-::-webkit-scrollbar-thumb:hover { background: hsl(152 40% 35%); }
+::-webkit-scrollbar-track { background: hsl(258 36% 7%); }
+::-webkit-scrollbar-thumb { background: hsl(258 25% 22%); border-radius: 8px; }
+::-webkit-scrollbar-thumb:hover { background: hsl(265 45% 45%); }
