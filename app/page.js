@@ -206,6 +206,11 @@ function HomeView({ setView, setLastOrder }) {
       const data = await res.json()
       if (data.ok) {
         setPreview(data)
+        // Filament & Druckzeit automatisch uebernehmen (bleiben editierbar)
+        setManual((m) => ({
+          grams: data.filamentGrams ? String(data.filamentGrams) : m.grams,
+          hours: data.printHours ? String(data.printHours) : m.hours,
+        }))
         toast.success('Modellinfos geladen')
       } else {
         setPreview(null)
@@ -611,6 +616,8 @@ function AdminView() {
   const [editing, setEditing] = useState(null)
   const [colors, setColors] = useState([])
   const [savingColors, setSavingColors] = useState(false)
+  const [printer, setPrinter] = useState('')
+  const [savingPrinter, setSavingPrinter] = useState(false)
 
   useEffect(() => {
     const t = typeof window !== 'undefined' ? localStorage.getItem('admin_token') : null
@@ -660,6 +667,32 @@ function AdminView() {
   }, [])
 
   useEffect(() => { if (token) loadColors() }, [token, loadColors])
+
+  // --- Drucker-Einstellung ---
+  const loadPrinter = useCallback(async () => {
+    if (!token) return
+    try {
+      const res = await fetch('/api/settings/printer', { headers: { Authorization: `Bearer ${token}` } })
+      const data = await res.json()
+      if (res.ok) setPrinter(data.printer || '')
+    } catch (e) { /* ignore */ }
+  }, [token])
+
+  useEffect(() => { if (token) loadPrinter() }, [token, loadPrinter])
+
+  const savePrinter = async () => {
+    setSavingPrinter(true)
+    try {
+      const res = await fetch('/api/settings/printer', {
+        method: 'PUT', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ printer }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Fehler')
+      setPrinter(data.printer)
+      toast.success('Drucker gespeichert')
+    } catch (e) { toast.error(e.message) } finally { setSavingPrinter(false) }
+  }
 
   const setColorField = (i, key, val) => setColors((cs) => cs.map((c, j) => (j === i ? { ...c, [key]: val } : c)))
   const addColor = () => setColors((cs) => [...cs, { name: '', hex: '#8b5cf6' }])
@@ -758,6 +791,23 @@ function AdminView() {
           </div>
         ))}
       </div>
+
+      {/* Drucker-Einstellung */}
+      <Card className="glass-card mb-6">
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-base"><Printer className="h-5 w-5 text-primary" /> Mein Drucker</CardTitle>
+          <CardDescription>Damit Druckzeit &amp; Filament automatisch vom passenden MakerWorld-Druckprofil übernommen werden.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-col sm:flex-row gap-2">
+            <Input placeholder="z. B. Bambu Lab P1S" value={printer} onChange={(e) => setPrinter(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && savePrinter()} />
+            <Button onClick={savePrinter} disabled={savingPrinter} className="gap-1 shrink-0">
+              {savingPrinter ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} Speichern
+            </Button>
+          </div>
+          <p className="mt-2 text-xs text-muted-foreground">Leer lassen = es wird das erste/Standard-Druckprofil verwendet.</p>
+        </CardContent>
+      </Card>
 
       {/* Farbverwaltung */}
       <Card className="glass-card mb-6">

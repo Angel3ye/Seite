@@ -129,13 +129,14 @@ function metaContent(html, prop) {
   return null
 }
 
-async function fetchMakerworldPreview(url) {
+async function fetchMakerworldPreview(url, printer = '') {
   const result = {
     ok: false,
     modelName: null,
     image: null,
     description: null,
     printTime: null,
+    printHours: null,
     filamentGrams: null,
     url,
   }
@@ -149,24 +150,49 @@ async function fetchMakerworldPreview(url) {
       .trim()
   }
 
-  // 1) Bevorzugt: Firecrawl (umgeht Cloudflare, rendert JavaScript)
+  // 1) Bevorzugt: Firecrawl mit KI-Extraktion (umgeht Cloudflare, rendert JS,
+  //    liest Modellname, Beschreibung, Druckzeit & Filament aus dem Druckprofil)
   const key = process.env.FIRECRAWL_API_KEY
   if (key) {
     try {
+      const printerHint = printer
+        ? `Bevorzuge das Druckprofil fuer den Drucker "${printer}". Wenn dieser Drucker nicht gelistet ist, nimm das erste/Standard-Profil. `
+        : 'Nimm das erste/Standard-Druckprofil. '
       const res = await fetch('https://api.firecrawl.dev/v1/scrape', {
         method: 'POST',
         headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url, formats: ['html'], waitFor: 6000 }),
+        body: JSON.stringify({
+          url,
+          formats: ['json'],
+          waitFor: 7000,
+          jsonOptions: {
+            prompt: `Extrahiere den Modellnamen, eine kurze Beschreibung, die Druckzeit in Stunden (Dezimalzahl) und das gesamte Filamentgewicht in Gramm. ${printerHint}`,
+            schema: {
+              type: 'object',
+              properties: {
+                modelName: { type: 'string' },
+                description: { type: 'string' },
+                printTimeHours: { type: 'number' },
+                filamentGrams: { type: 'number' },
+              },
+            },
+          },
+        }),
       })
       const data = await res.json()
+      const j = (data && data.data && data.data.json) || {}
       const m = (data && data.data && data.data.metadata) || {}
-      const title = cleanTitle(m.ogTitle || m.title)
+      const title = cleanTitle(j.modelName || m.ogTitle || m.title)
       const image = m.ogImage || null
-      const description = m.ogDescription || m.description || null
       if (title || image) {
         result.modelName = title || null
         result.image = image
-        result.description = description
+        result.description = j.description || m.ogDescription || null
+        result.printHours = (typeof j.printTimeHours === 'number' && j.printTimeHours > 0)
+          ? Math.round(j.printTimeHours * 10) / 10 : null
+        result.filamentGrams = (typeof j.filamentGrams === 'number' && j.filamentGrams > 0)
+          ? Math.round(j.filamentGrams) : null
+        result.printTime = result.printHours ? `${result.printHours} h` : null
         result.ok = true
         return result
       }
@@ -279,11 +305,33 @@ async function handler(request) {
       return json({ ok: true, colors })
     }
 
+    // --- Drucker-Einstellung abrufen (Admin) ---
+    if (seg[0] === 'settings' && seg[1] === 'printer' && method === 'GET') {
+      if (!isAuthed(request)) return json({ error: 'Nicht autorisiert' }, 401)
+      const doc = await settings.findOne({ key: 'printer' })
+      return json({ printer: (doc && doc.value) || '' })
+    }
+
+    // --- Drucker-Einstellung speichern (Admin) ---
+    if (seg[0] === 'settings' && seg[1] === 'printer' && method === 'PUT') {
+      if (!isAuthed(request)) return json({ error: 'Nicht autorisiert' }, 401)
+      const body = await request.json().catch(() => ({}))
+      const printer = typeof body.printer === 'string' ? body.printer.trim() : ''
+      await settings.updateOne(
+        { key: 'printer' },
+        { $set: { key: 'printer', value: printer, updatedAt: new Date().toISOString() } },
+        { upsert: true }
+      )
+      return json({ ok: true, printer })
+    }
+
     // --- MakerWorld Vorschau ---
     if (seg[0] === 'makerworld-preview' && method === 'POST') {
       const body = await request.json().catch(() => ({}))
       if (!body.url) return json({ error: 'Kein Link angegeben' }, 400)
-      const preview = await fetchMakerworldPreview(body.url)
+      const pdoc = await settings.findOne({ key: 'printer' })
+      const printer = (pdoc && pdoc.value) || process.env.DEFAULT_PRINTER || ''
+      const preview = await fetchMakerworldPreview(body.url, printer)
       return json(preview)
     }
 
