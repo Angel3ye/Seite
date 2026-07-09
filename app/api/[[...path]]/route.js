@@ -3,18 +3,20 @@ import { v4 as uuidv4 } from 'uuid'
 import { NextResponse } from 'next/server'
 
 // =============================================================
-// MongoDB-Verbindung (einmalig aufbauen und wiederverwenden)
+// MongoDB-Verbindung (serverless-sicher: globale, wiederverwendete
+// Verbindung, damit auf Vercel nicht bei jedem Aufruf eine neue
+// Verbindung geoeffnet wird)
 // =============================================================
-let client
-let db
-
 async function connectToMongo() {
-  if (!client) {
-    client = new MongoClient(process.env.MONGO_URL)
-    await client.connect()
-    db = client.db(process.env.DB_NAME)
+  const g = globalThis
+  if (!g._mongoClientPromise) {
+    const client = new MongoClient(process.env.MONGO_URL)
+    g._mongoClientPromise = client.connect()
   }
-  return db
+  const client = await g._mongoClientPromise
+  // Wenn DB_NAME nicht gesetzt ist, wird die Datenbank aus dem
+  // Connection-String verwendet.
+  return client.db(process.env.DB_NAME || undefined)
 }
 
 // =============================================================

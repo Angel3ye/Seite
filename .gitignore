@@ -33,6 +33,10 @@ dist
 # Environment files (comprehensive coverage)
 *token.json*
 *credentials.json*
+.env
+.env.local
+.env*.local
+!.env.example
 
 # Logs and debug files
 npm-debug.log*
