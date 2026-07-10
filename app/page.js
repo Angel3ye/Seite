@@ -6,7 +6,7 @@ import {
   Printer, Package, Search, ShieldCheck, LogOut, Trash2, Pencil, Upload,
   Loader2, CheckCircle2, Copy, Clock, Weight, Boxes, Zap, ExternalLink,
   Sparkles, ClipboardList, RefreshCw, X, ImageIcon, Send, Home as HomeIcon,
-  Palette, Plus, Save
+  Palette, Plus, Save, HelpCircle
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
@@ -22,6 +22,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter
 } from '@/components/ui/dialog'
 import { Toaster } from '@/components/ui/sonner'
+import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
 import { toast } from 'sonner'
 
 // =============================================================
@@ -207,6 +208,22 @@ function PreviewCard({ preview, loading }) {
 // =============================================================
 // Startseite: Begrüßung + Auftragsformular
 // =============================================================
+// Kleiner Info-Hinweis (ⓘ zum Anklicken) mit Erklärung, wo man den Wert findet
+function InfoHint({ children }) {
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button type="button" className="inline-flex text-muted-foreground hover:text-primary transition-colors" aria-label="Info">
+          <HelpCircle className="h-4 w-4" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-72 text-sm leading-relaxed" align="start">
+        {children}
+      </PopoverContent>
+    </Popover>
+  )
+}
+
 function HomeView({ setView, setLastOrder }) {
   const [form, setForm] = useState({
     name: '', makerworldLink: '', color: '',
@@ -241,6 +258,8 @@ function HomeView({ setView, setLastOrder }) {
   const submit = async () => {
     if (!form.name.trim()) return toast.error('Bitte gib deinen Namen an.')
     if (!/^https?:\/\//i.test(form.makerworldLink)) return toast.error('Bitte gib einen gültigen MakerWorld-Link an.')
+    if (!manual.grams || Number(manual.grams) <= 0) return toast.error('Bitte gib den Filamentverbrauch in Gramm an.')
+    if (!manual.hours || Number(manual.hours) <= 0) return toast.error('Bitte gib die Druckzeit in Stunden an.')
     setSubmitting(true)
     try {
       const model = (manual.grams || manual.hours)
@@ -304,7 +323,14 @@ function HomeView({ setView, setLastOrder }) {
             {/* MakerWorld-Link */}
             <div className="space-y-2">
               <div className="flex items-center justify-between gap-2">
-                <Label>MakerWorld-Link</Label>
+                <Label className="flex items-center gap-1.5">
+                  MakerWorld-Link <span className="text-primary">*</span>
+                  <InfoHint>
+                    <p className="font-medium mb-1">Wo finde ich den Link?</p>
+                    Öffne dein gewünschtes Modell auf MakerWorld. Kopiere die Adresse oben aus der Browser-Zeile
+                    (oder tippe auf „Teilen" → Link kopieren) und füge sie hier ein.
+                  </InfoHint>
+                </Label>
                 <a href="https://makerworld.com/de/3d-models" target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs text-accent hover:underline">
                   <ExternalLink className="h-3 w-3" /> Modelle durchsuchen
                 </a>
@@ -314,18 +340,31 @@ function HomeView({ setView, setLastOrder }) {
                 value={form.makerworldLink}
                 onChange={(e) => set('makerworldLink', e.target.value)}
               />
-              <p className="text-xs text-muted-foreground">Füge einfach den MakerWorld-Link ein – er wird gespeichert.</p>
               <div className="grid sm:grid-cols-2 gap-3 rounded-lg border border-border bg-muted/20 p-3">
                 <div className="sm:col-span-2 text-xs font-medium text-muted-foreground">Filament &amp; Druckzeit (von der MakerWorld-Seite)</div>
                 <div className="space-y-1.5">
-                  <Label className="text-xs">Filament in g</Label>
+                  <Label className="text-xs flex items-center gap-1.5">
+                    Filament in g <span className="text-primary">*</span>
+                    <InfoHint>
+                      <p className="font-medium mb-1">Wo finde ich das Filament?</p>
+                      Auf der MakerWorld-Modellseite bei den <b>Druckprofilen</b> steht der Filamentverbrauch in
+                      Gramm (z. B. „45 g" – oft neben einem Spulen-Symbol 🧵). Diesen Wert hier eintragen.
+                    </InfoHint>
+                  </Label>
                   <Input type="number" min={0} placeholder="z. B. 45" value={manual.grams} onChange={(e) => setManual((m) => ({ ...m, grams: e.target.value }))} />
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-xs">Druckzeit in Std.</Label>
+                  <Label className="text-xs flex items-center gap-1.5">
+                    Druckzeit in Std. <span className="text-primary">*</span>
+                    <InfoHint>
+                      <p className="font-medium mb-1">Wo finde ich die Druckzeit?</p>
+                      Ebenfalls beim <b>Druckprofil</b> auf MakerWorld (oft neben einem Uhr-Symbol 🕒), z. B. „4h 30m".
+                      Bitte in Stunden angeben: <b>4h 30m = 4,5</b> · 1h 15m = 1,25.
+                    </InfoHint>
+                  </Label>
                   <Input type="number" min={0} step="0.5" placeholder="z. B. 3" value={manual.hours} onChange={(e) => setManual((m) => ({ ...m, hours: e.target.value }))} />
                 </div>
-                <div className="sm:col-span-2 text-xs text-muted-foreground">Diese Werte findest du direkt auf der MakerWorld-Seite. Trägst du sie ein, wird der Preis genau berechnet.</div>
+                <div className="sm:col-span-2 text-xs text-muted-foreground">Alle mit <span className="text-primary">*</span> markierten Felder sind Pflicht – damit der Preis genau berechnet werden kann.</div>
               </div>
             </div>
 
