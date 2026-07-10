@@ -779,15 +779,14 @@ function AdminView() {
           <CardDescription>Wähle aus den offiziellen Bambu-Lab-Farben (PLA Basic &amp; PLA Matte) die aus, die du auf Lager hast.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          {/* Dropdown zum Hinzufügen */}
-          <Select value="" onValueChange={addBambuColor}>
-            <SelectTrigger className="w-full sm:w-80">
-              <span className="flex items-center gap-2 text-muted-foreground"><Plus className="h-4 w-4" /> Bambu-Lab-Farbe hinzufügen…</span>
-            </SelectTrigger>
-            <SelectContent className="max-h-80">
-              {BAMBU_GROUPS.map((g) => (
-                <SelectGroup key={g.finish}>
-                  <SelectLabel>{g.label}</SelectLabel>
+          {/* Zwei getrennte Dropdowns: PLA Basic & PLA Matte */}
+          <div className="grid sm:grid-cols-2 gap-3">
+            {BAMBU_GROUPS.map((g) => (
+              <Select key={g.finish} value="" onValueChange={addBambuColor}>
+                <SelectTrigger className="w-full">
+                  <span className="flex items-center gap-2 text-muted-foreground"><Plus className="h-4 w-4" /> {g.label} hinzufügen…</span>
+                </SelectTrigger>
+                <SelectContent className="max-h-80">
                   {g.colors.map((c) => {
                     const display = `${c.name} (${g.finish})`
                     return (
@@ -799,10 +798,10 @@ function AdminView() {
                       </SelectItem>
                     )
                   })}
-                </SelectGroup>
-              ))}
-            </SelectContent>
-          </Select>
+                </SelectContent>
+              </Select>
+            ))}
+          </div>
 
           {/* Ausgewählte Farben */}
           {colors.length === 0 ? (
@@ -908,6 +907,14 @@ function AdminView() {
                   </div>
                   <div className="space-y-1"><Label>Anzahl</Label>
                     <Input type="number" min={1} defaultValue={editing.quantity} onBlur={(e) => updateOrder(editing.id, { quantity: Math.max(1, parseInt(e.target.value) || 1) })} />
+                  </div>
+                  <div className="space-y-1"><Label>Filament (g)</Label>
+                    <Input type="number" min={0} defaultValue={editing.model?.filamentGrams ?? ''} placeholder="z. B. 45"
+                      onBlur={(e) => updateOrder(editing.id, { model: { ...(editing.model || {}), filamentGrams: e.target.value ? Number(e.target.value) : undefined } })} />
+                  </div>
+                  <div className="space-y-1"><Label>Druckzeit (Std.)</Label>
+                    <Input type="number" min={0} step="0.5" defaultValue={editing.model?.printHours ?? ''} placeholder="z. B. 3"
+                      onBlur={(e) => updateOrder(editing.id, { model: { ...(editing.model || {}), printHours: e.target.value ? Number(e.target.value) : undefined } })} />
                   </div>
                 </div>
 
