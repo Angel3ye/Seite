@@ -72,6 +72,10 @@ admin_token = None
 created_order_price_normal = None
 created_order_id_eilig = None
 customer_code_eilig = None
+order_a_id = None
+order_a_code = None
+order_b_id = None
+order_b_code = None
 
 # ============================================================================
 # TEST 1: POST /api/orders - Create Order (Normal Priority)
@@ -972,6 +976,407 @@ if admin_token:
         log_fail("PUT /api/settings/colors - Idempotency", f"Exception: {str(e)}")
 else:
     log_fail("PUT /api/settings/colors - Idempotency", "No admin token available")
+
+# ============================================================================
+# NEW FEATURE TESTS - Queue Position and Customer Message
+# ============================================================================
+
+# ============================================================================
+# TEST 27: Create Order A (for queue testing)
+# ============================================================================
+print("\n" + "=" * 80)
+print("TEST 27: Create Order A (for queue position testing)")
+print("=" * 80)
+
+try:
+    import time
+    payload = {
+        "name": "Anna Weber",
+        "makerworldLink": "https://makerworld.com/de/models/queue-test-a",
+        "color": "Schwarz",
+        "material": "PLA",
+        "size": 100,
+        "quantity": 1,
+        "priority": "Normal"
+    }
+    
+    response = requests.post(f"{BASE_URL}/orders", json=payload, timeout=10)
+    print(f"Status Code: {response.status_code}")
+    
+    if response.status_code == 200:
+        data = response.json()
+        order_a_code = data.get("customerCode")
+        print(f"Order A created with code: {order_a_code}")
+        log_pass("Queue test - Order A created successfully")
+    else:
+        log_fail("Queue test - Order A creation", f"Expected 200, got {response.status_code}: {response.text}")
+        
+    # Wait a moment to ensure different timestamps
+    time.sleep(1)
+        
+except Exception as e:
+    log_fail("Queue test - Order A creation", f"Exception: {str(e)}")
+
+# ============================================================================
+# TEST 28: Create Order B (for queue testing)
+# ============================================================================
+print("\n" + "=" * 80)
+print("TEST 28: Create Order B (for queue position testing)")
+print("=" * 80)
+
+try:
+    payload = {
+        "name": "Bernd Fischer",
+        "makerworldLink": "https://makerworld.com/de/models/queue-test-b",
+        "color": "Weiss",
+        "material": "PETG",
+        "size": 100,
+        "quantity": 1,
+        "priority": "Normal"
+    }
+    
+    response = requests.post(f"{BASE_URL}/orders", json=payload, timeout=10)
+    print(f"Status Code: {response.status_code}")
+    
+    if response.status_code == 200:
+        data = response.json()
+        order_b_code = data.get("customerCode")
+        print(f"Order B created with code: {order_b_code}")
+        log_pass("Queue test - Order B created successfully")
+    else:
+        log_fail("Queue test - Order B creation", f"Expected 200, got {response.status_code}: {response.text}")
+        
+except Exception as e:
+    log_fail("Queue test - Order B creation", f"Exception: {str(e)}")
+
+# ============================================================================
+# TEST 28b: Get Order IDs from admin endpoint
+# ============================================================================
+print("\n" + "=" * 80)
+print("TEST 28b: Get Order IDs from admin endpoint")
+print("=" * 80)
+
+if admin_token and order_a_code and order_b_code:
+    try:
+        headers = {"Authorization": f"Bearer {admin_token}"}
+        response = requests.get(f"{BASE_URL}/orders", headers=headers, timeout=10)
+        
+        if response.status_code == 200:
+            data = response.json()
+            orders = data.get("orders", [])
+            
+            for order in orders:
+                if order.get("customerCode") == order_a_code:
+                    order_a_id = order.get("id")
+                    print(f"Found Order A ID: {order_a_id}")
+                elif order.get("customerCode") == order_b_code:
+                    order_b_id = order.get("id")
+                    print(f"Found Order B ID: {order_b_id}")
+            
+            if order_a_id and order_b_id:
+                log_pass("Queue test - Order IDs retrieved successfully")
+            else:
+                log_fail("Queue test - Order IDs", f"Could not find order IDs (A: {order_a_id}, B: {order_b_id})")
+        else:
+            log_fail("Queue test - Get order IDs", f"Expected 200, got {response.status_code}")
+            
+    except Exception as e:
+        log_fail("Queue test - Get order IDs", f"Exception: {str(e)}")
+else:
+    log_fail("Queue test - Get order IDs", "Missing admin token or order codes")
+
+# ============================================================================
+# TEST 29: Track Order B - queueAhead should be >= 1
+# ============================================================================
+print("\n" + "=" * 80)
+print("TEST 29: Track Order B - queueAhead should be >= 1 (Order A is ahead)")
+print("=" * 80)
+
+if order_b_code:
+    try:
+        response = requests.get(f"{BASE_URL}/orders/track?code={order_b_code}", timeout=10)
+        print(f"Status Code: {response.status_code}")
+        
+        if response.status_code == 200:
+            data = response.json()
+            print(f"Response: {json.dumps(data, indent=2, ensure_ascii=False)}")
+            
+            if "queueAhead" in data:
+                queue_ahead = data["queueAhead"]
+                print(f"queueAhead: {queue_ahead}")
+                
+                if queue_ahead >= 1:
+                    log_pass(f"Queue position - Order B has queueAhead={queue_ahead} (Order A is ahead)")
+                else:
+                    log_fail("Queue position - queueAhead", f"Expected >= 1, got {queue_ahead}")
+            else:
+                log_fail("Queue position - queueAhead field", "queueAhead field missing in response")
+            
+            if "customerMessage" in data:
+                log_pass("Queue position - customerMessage field present")
+            else:
+                log_fail("Queue position - customerMessage field", "customerMessage field missing in response")
+        else:
+            log_fail("Queue position - Track Order B", f"Expected 200, got {response.status_code}: {response.text}")
+            
+    except Exception as e:
+        log_fail("Queue position - Track Order B", f"Exception: {str(e)}")
+else:
+    log_fail("Queue position - Track Order B", "No order B code available")
+
+# ============================================================================
+# TEST 30: Update Order A status to Abgeschlossen
+# ============================================================================
+print("\n" + "=" * 80)
+print("TEST 30: Update Order A status to 'Abgeschlossen' (admin)")
+print("=" * 80)
+
+if admin_token and order_a_id:
+    try:
+        headers = {"Authorization": f"Bearer {admin_token}"}
+        payload = {"status": "Abgeschlossen"}
+        
+        response = requests.put(f"{BASE_URL}/orders/{order_a_id}", json=payload, headers=headers, timeout=10)
+        print(f"Status Code: {response.status_code}")
+        
+        if response.status_code == 200:
+            data = response.json()
+            if data.get("ok") and data.get("order", {}).get("status") == "Abgeschlossen":
+                log_pass("Queue test - Order A status updated to 'Abgeschlossen'")
+            else:
+                log_fail("Queue test - Order A status update", f"Status not updated correctly: {data}")
+        else:
+            log_fail("Queue test - Order A status update", f"Expected 200, got {response.status_code}: {response.text}")
+            
+    except Exception as e:
+        log_fail("Queue test - Order A status update", f"Exception: {str(e)}")
+else:
+    log_fail("Queue test - Order A status update", "Missing admin token or order A ID")
+
+# ============================================================================
+# TEST 31: Track Order B again - queueAhead should decrease
+# ============================================================================
+print("\n" + "=" * 80)
+print("TEST 31: Track Order B again - queueAhead should decrease (Order A is done)")
+print("=" * 80)
+
+if order_b_code:
+    try:
+        response = requests.get(f"{BASE_URL}/orders/track?code={order_b_code}", timeout=10)
+        print(f"Status Code: {response.status_code}")
+        
+        if response.status_code == 200:
+            data = response.json()
+            print(f"Response: {json.dumps(data, indent=2, ensure_ascii=False)}")
+            
+            if "queueAhead" in data:
+                queue_ahead = data["queueAhead"]
+                print(f"queueAhead after Order A completed: {queue_ahead}")
+                
+                # Should be 0 or at least less than before (if there were other orders)
+                if queue_ahead == 0:
+                    log_pass(f"Queue position - Order B queueAhead=0 after Order A completed")
+                else:
+                    log_warning("Queue position - queueAhead after completion", f"Expected 0, got {queue_ahead} (may have other orders ahead)")
+            else:
+                log_fail("Queue position - queueAhead field", "queueAhead field missing in response")
+        else:
+            log_fail("Queue position - Track Order B after A completed", f"Expected 200, got {response.status_code}: {response.text}")
+            
+    except Exception as e:
+        log_fail("Queue position - Track Order B after A completed", f"Exception: {str(e)}")
+else:
+    log_fail("Queue position - Track Order B after A completed", "No order B code available")
+
+# ============================================================================
+# TEST 32: Track Order A (done) - queueAhead should be 0
+# ============================================================================
+print("\n" + "=" * 80)
+print("TEST 32: Track Order A (done) - queueAhead should be 0")
+print("=" * 80)
+
+if order_a_code:
+    try:
+        response = requests.get(f"{BASE_URL}/orders/track?code={order_a_code}", timeout=10)
+        print(f"Status Code: {response.status_code}")
+        
+        if response.status_code == 200:
+            data = response.json()
+            print(f"Response: {json.dumps(data, indent=2, ensure_ascii=False)}")
+            
+            if data.get("status") == "Abgeschlossen":
+                if "queueAhead" in data:
+                    queue_ahead = data["queueAhead"]
+                    print(f"queueAhead for completed order: {queue_ahead}")
+                    
+                    if queue_ahead == 0:
+                        log_pass("Queue position - Completed order has queueAhead=0")
+                    else:
+                        log_fail("Queue position - Completed order queueAhead", f"Expected 0, got {queue_ahead}")
+                else:
+                    log_fail("Queue position - queueAhead field", "queueAhead field missing in response")
+            else:
+                log_fail("Queue position - Order A status", f"Expected 'Abgeschlossen', got {data.get('status')}")
+        else:
+            log_fail("Queue position - Track Order A", f"Expected 200, got {response.status_code}: {response.text}")
+            
+    except Exception as e:
+        log_fail("Queue position - Track Order A", f"Exception: {str(e)}")
+else:
+    log_fail("Queue position - Track Order A", "No order A code available")
+
+# ============================================================================
+# TEST 33: Update customerMessage - Without Authorization
+# ============================================================================
+print("\n" + "=" * 80)
+print("TEST 33: Update customerMessage - Without Authorization")
+print("=" * 80)
+
+if order_b_id:
+    try:
+        payload = {"customerMessage": "Test message without auth"}
+        response = requests.put(f"{BASE_URL}/orders/{order_b_id}", json=payload, timeout=10)
+        print(f"Status Code: {response.status_code}")
+        
+        if response.status_code == 401:
+            log_pass("Customer message - No auth returns 401")
+        else:
+            log_fail("Customer message - No auth", f"Expected 401, got {response.status_code}")
+            
+    except Exception as e:
+        log_fail("Customer message - No auth", f"Exception: {str(e)}")
+else:
+    log_fail("Customer message - No auth", "No order B ID available")
+
+# ============================================================================
+# TEST 34: Update customerMessage - With Authorization
+# ============================================================================
+print("\n" + "=" * 80)
+print("TEST 34: Update customerMessage - With Authorization")
+print("=" * 80)
+
+if admin_token and order_b_id:
+    try:
+        headers = {"Authorization": f"Bearer {admin_token}"}
+        test_message = "Dein Druck ist fertig"
+        payload = {"customerMessage": test_message}
+        
+        response = requests.put(f"{BASE_URL}/orders/{order_b_id}", json=payload, headers=headers, timeout=10)
+        print(f"Status Code: {response.status_code}")
+        
+        if response.status_code == 200:
+            data = response.json()
+            print(f"Response: {json.dumps(data, indent=2, ensure_ascii=False)}")
+            
+            if data.get("ok"):
+                log_pass("Customer message - Update successful (ok: true)")
+            else:
+                log_fail("Customer message - Update response", "Expected ok:true")
+            
+            if "order" in data and data["order"].get("customerMessage") == test_message:
+                log_pass(f"Customer message - Message set correctly: '{test_message}'")
+            else:
+                log_fail("Customer message - Message in response", f"Expected '{test_message}', got {data.get('order', {}).get('customerMessage')}")
+        else:
+            log_fail("Customer message - Update with auth", f"Expected 200, got {response.status_code}: {response.text}")
+            
+    except Exception as e:
+        log_fail("Customer message - Update with auth", f"Exception: {str(e)}")
+else:
+    log_fail("Customer message - Update with auth", "Missing admin token or order B ID")
+
+# ============================================================================
+# TEST 35: Track Order B - Verify customerMessage
+# ============================================================================
+print("\n" + "=" * 80)
+print("TEST 35: Track Order B - Verify customerMessage in tracking")
+print("=" * 80)
+
+if order_b_code:
+    try:
+        response = requests.get(f"{BASE_URL}/orders/track?code={order_b_code}", timeout=10)
+        print(f"Status Code: {response.status_code}")
+        
+        if response.status_code == 200:
+            data = response.json()
+            print(f"Response: {json.dumps(data, indent=2, ensure_ascii=False)}")
+            
+            if "customerMessage" in data:
+                customer_message = data["customerMessage"]
+                print(f"customerMessage: {customer_message}")
+                
+                if customer_message == "Dein Druck ist fertig":
+                    log_pass("Customer message - Message retrieved correctly in tracking")
+                else:
+                    log_fail("Customer message - Message in tracking", f"Expected 'Dein Druck ist fertig', got '{customer_message}'")
+            else:
+                log_fail("Customer message - Field in tracking", "customerMessage field missing in response")
+        else:
+            log_fail("Customer message - Track with message", f"Expected 200, got {response.status_code}: {response.text}")
+            
+    except Exception as e:
+        log_fail("Customer message - Track with message", f"Exception: {str(e)}")
+else:
+    log_fail("Customer message - Track with message", "No order B code available")
+
+# ============================================================================
+# TEST 36: Regression - Existing tracking fields still work
+# ============================================================================
+print("\n" + "=" * 80)
+print("TEST 36: Regression - Existing tracking fields still work")
+print("=" * 80)
+
+if order_b_code:
+    try:
+        response = requests.get(f"{BASE_URL}/orders/track?code={order_b_code}", timeout=10)
+        print(f"Status Code: {response.status_code}")
+        
+        if response.status_code == 200:
+            data = response.json()
+            
+            required_fields = ["orderNumber", "customerCode", "name", "status", "price"]
+            missing_fields = [f for f in required_fields if f not in data]
+            
+            if not missing_fields:
+                log_pass("Regression - All existing tracking fields present")
+            else:
+                log_fail("Regression - Missing fields", f"Missing: {missing_fields}")
+            
+            if data.get("orderNumber", "").startswith("3D-"):
+                log_pass("Regression - orderNumber format still correct")
+            else:
+                log_fail("Regression - orderNumber format", f"Expected 3D-XXXXXX, got {data.get('orderNumber')}")
+            
+            if "_id" not in data:
+                log_pass("Regression - No MongoDB _id leak")
+            else:
+                log_fail("Regression - MongoDB _id leak", "Response contains _id field")
+        else:
+            log_fail("Regression - Tracking", f"Expected 200, got {response.status_code}: {response.text}")
+            
+    except Exception as e:
+        log_fail("Regression - Tracking", f"Exception: {str(e)}")
+else:
+    log_fail("Regression - Tracking", "No order B code available")
+
+# ============================================================================
+# TEST 37: Regression - Invalid code still returns 404
+# ============================================================================
+print("\n" + "=" * 80)
+print("TEST 37: Regression - Invalid code still returns 404")
+print("=" * 80)
+
+try:
+    response = requests.get(f"{BASE_URL}/orders/track?code=INVALID99", timeout=10)
+    print(f"Status Code: {response.status_code}")
+    
+    if response.status_code == 404:
+        log_pass("Regression - Invalid code returns 404")
+    else:
+        log_fail("Regression - Invalid code", f"Expected 404, got {response.status_code}")
+        
+except Exception as e:
+    log_fail("Regression - Invalid code", f"Exception: {str(e)}")
 
 # ============================================================================
 # SUMMARY

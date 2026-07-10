@@ -384,12 +384,23 @@ async function handler(request) {
       if (!order) return json({ error: 'Kein Auftrag mit diesem Code gefunden' }, 404)
       // Nur relevante, oeffentliche Felder
       const s = sanitize(order)
+      // Warteschlange: wie viele noch offene Auftraege wurden frueher erstellt?
+      const doneSet = new Set(['Fertig', 'Abholbereit', 'Abgeschlossen'])
+      let queueAhead = 0
+      if (!doneSet.has(s.status)) {
+        const all = await orders.find({}).toArray()
+        queueAhead = all.filter((o) =>
+          o.id !== s.id && !doneSet.has(o.status) && new Date(o.createdAt) < new Date(s.createdAt)
+        ).length
+      }
       return json({
         orderNumber: s.orderNumber,
         customerCode: s.customerCode,
         name: s.name,
         status: s.status,
         statusHistory: s.statusHistory || [],
+        customerMessage: s.customerMessage || '',
+        queueAhead,
         model: s.model || null,
         makerworldLink: s.makerworldLink,
         color: s.color,
@@ -467,7 +478,7 @@ async function handler(request) {
 
       const now = new Date().toISOString()
       const update = { updatedAt: now }
-      const allowed = ['status', 'adminNotes', 'notes', 'color', 'material', 'size', 'quantity', 'priority', 'photos', 'model']
+      const allowed = ['status', 'adminNotes', 'notes', 'color', 'material', 'size', 'quantity', 'priority', 'photos', 'model', 'customerMessage']
       for (const k of allowed) {
         if (body[k] !== undefined) update[k] = body[k]
       }

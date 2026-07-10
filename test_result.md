@@ -240,6 +240,38 @@ backend:
         -agent: "testing"
         -comment: "✅ TESTED: Without auth returns 401. With Bearer token and valid body returns 200 with ok:true. Empty names correctly filtered (3 colors sent, 2 saved). Saved colors persist and override defaults. Idempotency verified (can update colors multiple times). No MongoDB _id leak. All tests passed (5/5)."
 
+  - task: "Warteschlangen-Position + Kundennachricht im Tracking (GET /api/orders/track)"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "NEU: GET /api/orders/track?code= liefert jetzt zusaetzlich 'queueAhead' (Anzahl offener Auftraege die frueher erstellt wurden, exkl. Status Fertig/Abholbereit/Abgeschlossen) und 'customerMessage'. Bei abgeschlossenen Auftraegen soll queueAhead=0 sein. Bitte testen: mehrere Auftraege erstellen, ein aelterer offener Auftrag -> neuerer Auftrag zeigt queueAhead>=1. Nach Statuswechsel des aelteren auf 'Abgeschlossen' -> queueAhead des neueren sinkt."
+        -working: true
+        -agent: "testing"
+        -comment: "✅ TESTED: queueAhead logic working correctly. Created Order A, then Order B. Order B shows queueAhead=10 (10 orders ahead including A). After marking Order A as 'Abgeschlossen', Order B's queueAhead decreased to 9 (other orders still ahead). Order A (completed) shows queueAhead=0 as expected. customerMessage field present in all tracking responses. Logic verified: queueAhead counts only open orders (status NOT in [Fertig, Abholbereit, Abgeschlossen]) created earlier. Completed orders always show queueAhead=0."
+
+
+  - task: "Kundennachricht speichern (PUT /api/orders/:id customerMessage, Auth)"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -working: true
+        -agent: "testing"
+        -comment: "✅ TESTED: customerMessage functionality working correctly. PUT /api/orders/:id without auth returns 401 as expected. With Bearer token, customerMessage 'Dein Druck ist fertig' was successfully saved. GET /api/orders/track correctly returns the saved customerMessage. All authentication checks working. Regression test passed: existing tracking fields (orderNumber, status, price) still work correctly, invalid code returns 404, no MongoDB _id leaks."
+
+        -comment: "NEU: PUT /api/orders/:id akzeptiert Feld 'customerMessage'. Nach Update muss GET /api/orders/track?code= die gesetzte customerMessage zurueckgeben. Ohne Auth 401."
+
 frontend:
   - task: "Startseite + Auftragsformular + Live-Preis + Erfolgsdialog"
     implemented: true
@@ -284,7 +316,9 @@ metadata:
   run_ui: true
 
 test_plan:
-  current_focus: []
+  current_focus:
+    - "Warteschlangen-Position + Kundennachricht im Tracking (GET /api/orders/track)"
+    - "Kundennachricht speichern (PUT /api/orders/:id customerMessage, Auth)"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
@@ -298,3 +332,7 @@ agent_communication:
     -message: "NEUE FUNKTION: Admin kann verfuegbare Farben verwalten. Bitte NUR die neuen Farb-Endpunkte testen: (1) GET /api/colors -> oeffentlich, liefert {colors:[{name,hex}]}. Ohne gespeicherte Farben werden DEFAULT_COLORS (10 Stueck) zurueckgegeben. (2) PUT /api/settings/colors -> Admin (Bearer Token noetig, ohne Token 401). Body {colors:[{name:'Test',hex:'#ff0000'}]} -> speichert und liefert {ok:true, colors}. Danach GET /api/colors muss die gespeicherten Farben liefern. Leere/namenlose Eintraege werden herausgefiltert. Admin-Login admin/Admin123!."
     -agent: "testing"
     -message: "✅ COLOR ENDPOINTS FULLY TESTED (5/5 tests passed). GET /api/colors: Returns 10 default colors when none saved, returns saved colors after PUT. PUT /api/settings/colors: Requires auth (401 without token), filters empty names correctly (sent 3, saved 2), supports idempotent updates. No MongoDB _id leaks. All functionality working as specified."
+    -agent: "main"
+    -message: "NEUE FUNKTIONEN: (1) queueAhead in GET /api/orders/track - zeigt Anzahl offener Auftraege die frueher erstellt wurden. (2) customerMessage in PUT /api/orders/:id - Admin kann Nachricht fuer Kunden setzen, die dann im Tracking erscheint. Bitte beide Features testen."
+    -agent: "testing"
+    -message: "✅ NEW FEATURES FULLY TESTED (11/11 tests passed). FEATURE 1 - queueAhead: Logic working correctly. Order B shows queueAhead=10 when 10 orders ahead. After marking Order A as 'Abgeschlossen', queueAhead decreased to 9. Completed orders show queueAhead=0. Counts only open orders (status NOT in [Fertig, Abholbereit, Abgeschlossen]) created earlier. FEATURE 2 - customerMessage: PUT without auth returns 401. With auth, message saved successfully. GET /api/orders/track returns saved message. Regression tests passed: existing tracking fields work, invalid code returns 404, no MongoDB _id leaks. All backend APIs working correctly."

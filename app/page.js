@@ -617,6 +617,24 @@ function TrackView({ initialCode }) {
                   <Info label="Anzahl" value={order.quantity} />
                 </div>
 
+                {order.customerMessage && (
+                  <div className="rounded-lg border border-accent/40 bg-accent/10 p-4">
+                    <div className="flex items-center gap-2 text-sm font-medium text-accent mb-1"><ClipboardList className="h-4 w-4" /> Nachricht vom Drucker</div>
+                    <p className="text-sm whitespace-pre-wrap">{order.customerMessage}</p>
+                  </div>
+                )}
+
+                {!['Fertig', 'Abholbereit', 'Abgeschlossen'].includes(order.status) && (
+                  <div className="flex items-center gap-3 rounded-lg border border-border bg-muted/20 p-4">
+                    <div className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-primary/15 text-lg font-bold text-primary">{order.queueAhead ?? 0}</div>
+                    <div className="text-sm">
+                      {order.queueAhead > 0
+                        ? <>Vor deinem Auftrag {order.queueAhead === 1 ? 'ist noch' : 'sind noch'} <b>{order.queueAhead}</b> {order.queueAhead === 1 ? 'Auftrag' : 'Aufträge'} in der Warteschlange.</>
+                        : <>Dein Auftrag ist als <b>Nächstes</b> dran! 🎉</>}
+                    </div>
+                  </div>
+                )}
+
                 <div>
                   <div className="text-sm font-medium mb-3">Fortschritt</div>
                   <StatusStepper status={order.status} />
@@ -1062,6 +1080,11 @@ function AdminView() {
 
                 <div className="space-y-1"><Label>Interne Admin-Notiz</Label>
                   <Textarea defaultValue={editing.adminNotes} placeholder="Nur für dich sichtbar…" onBlur={(e) => updateOrder(editing.id, { adminNotes: e.target.value })} />
+                </div>
+
+                <div className="space-y-1"><Label className="flex items-center gap-1.5 text-primary"><ClipboardList className="h-4 w-4" /> Nachricht an den Kunden</Label>
+                  <Textarea defaultValue={editing.customerMessage} placeholder="Wird dem Kunden in der Statusabfrage angezeigt, z. B. Dein Druck ist fertig, du kannst ihn ab Freitag abholen." onBlur={(e) => updateOrder(editing.id, { customerMessage: e.target.value })} />
+                  <p className="text-xs text-muted-foreground">Sichtbar für den Kunden über den Auftragscode.</p>
                 </div>
 
                 {/* Fotos */}
