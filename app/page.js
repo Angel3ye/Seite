@@ -43,6 +43,8 @@ const COLORS = [
   { name: 'Egal / Überrasch mich', hex: 'linear-gradient(135deg,#16a34a,#2563eb)' },
 ]
 const MATERIALS = ['PLA', 'PETG', 'TPU']
+// Häufige Materialien für die Admin-Auswahl (per Dropdown hinzufügbar)
+const MATERIAL_PRESETS = ['PLA', 'PLA Matte', 'PLA Silk', 'PETG', 'TPU', 'ABS', 'ASA', 'PLA-CF', 'PETG-CF', 'PA / Nylon', 'PC', 'HIPS', 'PVA']
 
 // Offizielle Bambu Lab Farben (PLA Basic + PLA Matte) fuer die Admin-Auswahl
 const BAMBU_GROUPS = [
@@ -232,6 +234,7 @@ function HomeView({ setView, setLastOrder }) {
   const [submitting, setSubmitting] = useState(false)
   const [manual, setManual] = useState({ grams: '', hours: '' })
   const [colors, setColors] = useState(COLORS)
+  const [materials, setMaterials] = useState(MATERIALS)
 
   // Verfuegbare Farben aus der Datenbank laden (vom Admin verwaltet)
   useEffect(() => {
@@ -241,6 +244,16 @@ function HomeView({ setView, setLastOrder }) {
         if (Array.isArray(data.colors) && data.colors.length > 0) {
           setColors(data.colors)
           setForm((f) => ({ ...f, color: f.color || data.colors[0].name }))
+        }
+      })
+      .catch(() => {})
+    // Verfuegbare Materialien laden (vom Admin verwaltet)
+    fetch('/api/materials')
+      .then((r) => r.json())
+      .then((data) => {
+        if (Array.isArray(data.materials) && data.materials.length > 0) {
+          setMaterials(data.materials)
+          setForm((f) => ({ ...f, material: data.materials.includes(f.material) ? f.material : data.materials[0] }))
         }
       })
       .catch(() => {})
@@ -391,7 +404,7 @@ function HomeView({ setView, setLastOrder }) {
                 <Select value={form.material} onValueChange={(v) => set('material', v)}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {MATERIALS.map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+                    {materials.map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
@@ -655,6 +668,9 @@ function AdminView() {
   const [editing, setEditing] = useState(null)
   const [colors, setColors] = useState([])
   const [savingColors, setSavingColors] = useState(false)
+  const [materials, setMaterials] = useState([])
+  const [newMaterial, setNewMaterial] = useState('')
+  const [savingMaterials, setSavingMaterials] = useState(false)
 
   useEffect(() => {
     const t = typeof window !== 'undefined' ? localStorage.getItem('admin_token') : null
@@ -704,6 +720,38 @@ function AdminView() {
   }, [])
 
   useEffect(() => { if (token) loadColors() }, [token, loadColors])
+
+  // --- Materialverwaltung ---
+  const loadMaterials = useCallback(async () => {
+    try {
+      const res = await fetch('/api/materials')
+      const data = await res.json()
+      setMaterials(Array.isArray(data.materials) ? data.materials : [])
+    } catch (e) { /* ignore */ }
+  }, [])
+
+  useEffect(() => { if (token) loadMaterials() }, [token, loadMaterials])
+
+  const addMaterial = (name) => {
+    const n = (name || '').trim()
+    if (!n) return
+    setMaterials((ms) => (ms.some((x) => x.toLowerCase() === n.toLowerCase()) ? ms : [...ms, n]))
+    setNewMaterial('')
+  }
+  const removeMaterial = (i) => setMaterials((ms) => ms.filter((_, j) => j !== i))
+  const saveMaterials = async () => {
+    setSavingMaterials(true)
+    try {
+      const res = await fetch('/api/settings/materials', {
+        method: 'PUT', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ materials }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Fehler')
+      setMaterials(data.materials)
+      toast.success('Materialien gespeichert')
+    } catch (e) { toast.error(e.message) } finally { setSavingMaterials(false) }
+  }
 
   const removeColor = (i) => setColors((cs) => cs.filter((_, j) => j !== i))
   const addBambuColor = (displayName) => {
@@ -805,6 +853,53 @@ function AdminView() {
           </div>
         ))}
       </div>
+
+      {/* Materialverwaltung */}
+      <Card className="glass-card mb-6">
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <CardTitle className="flex items-center gap-2 text-base"><Boxes className="h-5 w-5 text-primary" /> Verfügbare Materialien</CardTitle>
+            <Button size="sm" onClick={saveMaterials} disabled={savingMaterials} className="gap-1">
+              {savingMaterials ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} Speichern
+            </Button>
+          </div>
+          <CardDescription>Lege fest, welche Materialien Kunden auswählen können – z. B. nur das, was du gerade da hast.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex flex-col sm:flex-row gap-2">
+            <Select value="" onValueChange={addMaterial}>
+              <SelectTrigger className="w-full sm:w-64">
+                <span className="flex items-center gap-2 text-muted-foreground"><Plus className="h-4 w-4" /> Material hinzufügen…</span>
+              </SelectTrigger>
+              <SelectContent>
+                {MATERIAL_PRESETS.map((m) => (
+                  <SelectItem key={m} value={m} disabled={materials.some((x) => x.toLowerCase() === m.toLowerCase())}>{m}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <div className="flex gap-2 flex-1">
+              <Input placeholder="Eigenes Material…" value={newMaterial} onChange={(e) => setNewMaterial(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addMaterial(newMaterial)} />
+              <Button variant="secondary" onClick={() => addMaterial(newMaterial)} className="shrink-0">Hinzufügen</Button>
+            </div>
+          </div>
+
+          {materials.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Noch keine Materialien ausgewählt.</p>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              {materials.map((m, i) => (
+                <span key={i} className="inline-flex items-center gap-2 rounded-full border border-border bg-muted/30 py-1 pl-3 pr-1 text-sm">
+                  {m}
+                  <button onClick={() => removeMaterial(i)} className="grid h-5 w-5 place-items-center rounded-full hover:bg-destructive/20 text-muted-foreground hover:text-destructive">
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
+          <p className="text-xs text-muted-foreground">Nicht vergessen: nach Änderungen auf „Speichern" klicken.</p>
+        </CardContent>
+      </Card>
 
       {/* Farbverwaltung */}
       <Card className="glass-card mb-6">

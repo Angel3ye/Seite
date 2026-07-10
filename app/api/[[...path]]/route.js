@@ -241,6 +241,8 @@ function genCustomerCode() {
 
 const STATUSES = ['Eingegangen', 'In Pruefung', 'Druck laeuft', 'Fertig', 'Abholbereit', 'Abgeschlossen']
 
+const DEFAULT_MATERIALS = ['PLA', 'PETG', 'TPU']
+
 // Standard-Farben (werden verwendet, solange der Admin keine eigene Liste gespeichert hat)
 const DEFAULT_COLORS = [
   { name: 'Schwarz', hex: '#1a1a1a' },
@@ -303,6 +305,28 @@ async function handler(request) {
         { upsert: true }
       )
       return json({ ok: true, colors })
+    }
+
+    // --- Materialien abrufen (oeffentlich) ---
+    if (seg[0] === 'materials' && method === 'GET') {
+      const doc = await settings.findOne({ key: 'materials' })
+      const materials = (doc && Array.isArray(doc.value) && doc.value.length > 0) ? doc.value : DEFAULT_MATERIALS
+      return json({ materials })
+    }
+
+    // --- Materialien speichern (Admin) ---
+    if (seg[0] === 'settings' && seg[1] === 'materials' && method === 'PUT') {
+      if (!isAuthed(request)) return json({ error: 'Nicht autorisiert' }, 401)
+      const body = await request.json().catch(() => ({}))
+      const materials = Array.isArray(body.materials)
+        ? [...new Set(body.materials.filter((m) => typeof m === 'string' && m.trim()).map((m) => m.trim()))]
+        : []
+      await settings.updateOne(
+        { key: 'materials' },
+        { $set: { key: 'materials', value: materials, updatedAt: new Date().toISOString() } },
+        { upsert: true }
+      )
+      return json({ ok: true, materials })
     }
 
     // --- Drucker-Einstellung abrufen (Admin) ---
