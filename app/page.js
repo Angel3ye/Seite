@@ -620,7 +620,7 @@ function TrackView({ initialCode }) {
 
                 {order.customerMessage && (
                   <div className="rounded-lg border border-accent/40 bg-accent/10 p-4">
-                    <div className="flex items-center gap-2 text-sm font-medium text-accent mb-1"><ClipboardList className="h-4 w-4" /> Nachricht vom Drucker</div>
+                    <div className="flex items-center gap-2 text-sm font-medium text-accent mb-1"><ClipboardList className="h-4 w-4" /> Nachricht von Jannik</div>
                     <p className="text-sm whitespace-pre-wrap">{order.customerMessage}</p>
                   </div>
                 )}
