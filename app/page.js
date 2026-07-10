@@ -23,6 +23,7 @@ import {
 } from '@/components/ui/dialog'
 import { Toaster } from '@/components/ui/sonner'
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { toast } from 'sonner'
 
 // =============================================================
@@ -862,6 +863,14 @@ function AdminView() {
         </div>
       </div>
 
+      <Tabs defaultValue="orders" className="w-full">
+        <TabsList className="mb-6">
+          <TabsTrigger value="orders" className="gap-2"><ClipboardList className="h-4 w-4" /> Aufträge</TabsTrigger>
+          <TabsTrigger value="config" className="gap-2"><Boxes className="h-4 w-4" /> Konfiguration</TabsTrigger>
+        </TabsList>
+
+        {/* ---- Tab: Aufträge ---- */}
+        <TabsContent value="orders" className="mt-0 space-y-6">
       {/* Statistik */}
       <div className="grid grid-cols-3 sm:grid-cols-6 gap-3 mb-6">
         {stats.map((st) => (
@@ -872,6 +881,62 @@ function AdminView() {
         ))}
       </div>
 
+      {/* Auftragsliste */}
+      {orders.length === 0 ? (
+        <div className="text-center py-20 text-muted-foreground">
+          <Boxes className="h-10 w-10 mx-auto mb-3 opacity-50" />
+          Noch keine Aufträge vorhanden.
+        </div>
+      ) : (
+        <div className="grid gap-4">
+          {orders.map((o) => (
+            <motion.div key={o.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+              <Card className="glass-card">
+                <CardContent className="p-4">
+                  <div className="flex flex-col lg:flex-row gap-4">
+                    {/* Bild */}
+                    <div className="h-24 w-24 shrink-0 rounded-lg overflow-hidden bg-muted grid place-items-center">
+                      {o.model?.image ? <img src={o.model.image} alt="" className="h-full w-full object-cover" /> : <Printer className="h-8 w-8 text-muted-foreground" />}
+                    </div>
+                    {/* Infos */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-semibold">{o.name}</span>
+                        <Badge variant="outline" className="font-mono text-xs">{o.orderNumber}</Badge>
+                        <Badge variant="outline" className="font-mono text-xs bg-primary/10 text-primary border-primary/30">Code: {o.customerCode}</Badge>
+                        {o.priority === 'Eilig' && <Badge className="gap-1 bg-red-500/20 text-red-300 border-red-500/40" variant="outline"><Zap className="h-3 w-3" />Eilig</Badge>}
+                      </div>
+                      <div className="mt-1 text-sm text-muted-foreground truncate">{o.model?.modelName || o.makerworldLink}</div>
+                      <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm">
+                        <span>Farbe: <b>{o.color}</b></span>
+                        <span>Material: <b>{o.material}</b></span>
+                        <span>Größe: <b>{o.size}%</b></span>
+                        <span>Anzahl: <b>{o.quantity}</b></span>
+                        <span className="text-primary">Preis: <b>ca. {eur(o.price?.total)}</b></span>
+                      </div>
+                    </div>
+                    {/* Aktionen */}
+                    <div className="flex flex-row lg:flex-col gap-2 lg:w-52">
+                      <Select value={o.status} onValueChange={(v) => updateOrder(o.id, { status: v })}>
+                        <SelectTrigger className={`${STATUS_STYLES[o.status] || ''}`}><SelectValue /></SelectTrigger>
+                        <SelectContent>{STATUS_STEPS.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
+                      </Select>
+                      <div className="flex gap-2">
+                        <Button size="sm" variant="secondary" className="flex-1 gap-1" onClick={() => setEditing(o)}><Pencil className="h-3.5 w-3.5" /> Details</Button>
+                        <Button size="sm" variant="ghost" className="text-destructive" onClick={() => deleteOrder(o.id)}><Trash2 className="h-4 w-4" /></Button>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </motion.div>
+          ))}
+        </div>
+      )}
+        </TabsContent>
+
+        {/* ---- Tab: Konfiguration ---- */}
+        <TabsContent value="config" className="mt-0 space-y-6">
       {/* Materialverwaltung */}
       <Card className="glass-card mb-6">
         <CardHeader className="pb-3">
@@ -974,59 +1039,8 @@ function AdminView() {
           <p className="text-xs text-muted-foreground">Nicht vergessen: nach Änderungen auf „Speichern" klicken.</p>
         </CardContent>
       </Card>
-
-      {/* Auftragsliste */}
-      {orders.length === 0 ? (
-        <div className="text-center py-20 text-muted-foreground">
-          <Boxes className="h-10 w-10 mx-auto mb-3 opacity-50" />
-          Noch keine Aufträge vorhanden.
-        </div>
-      ) : (
-        <div className="grid gap-4">
-          {orders.map((o) => (
-            <motion.div key={o.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-              <Card className="glass-card">
-                <CardContent className="p-4">
-                  <div className="flex flex-col lg:flex-row gap-4">
-                    {/* Bild */}
-                    <div className="h-24 w-24 shrink-0 rounded-lg overflow-hidden bg-muted grid place-items-center">
-                      {o.model?.image ? <img src={o.model.image} alt="" className="h-full w-full object-cover" /> : <Printer className="h-8 w-8 text-muted-foreground" />}
-                    </div>
-                    {/* Infos */}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-semibold">{o.name}</span>
-                        <Badge variant="outline" className="font-mono text-xs">{o.orderNumber}</Badge>
-                        <Badge variant="outline" className="font-mono text-xs bg-primary/10 text-primary border-primary/30">Code: {o.customerCode}</Badge>
-                        {o.priority === 'Eilig' && <Badge className="gap-1 bg-red-500/20 text-red-300 border-red-500/40" variant="outline"><Zap className="h-3 w-3" />Eilig</Badge>}
-                      </div>
-                      <div className="mt-1 text-sm text-muted-foreground truncate">{o.model?.modelName || o.makerworldLink}</div>
-                      <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm">
-                        <span>Farbe: <b>{o.color}</b></span>
-                        <span>Material: <b>{o.material}</b></span>
-                        <span>Größe: <b>{o.size}%</b></span>
-                        <span>Anzahl: <b>{o.quantity}</b></span>
-                        <span className="text-primary">Preis: <b>ca. {eur(o.price?.total)}</b></span>
-                      </div>
-                    </div>
-                    {/* Aktionen */}
-                    <div className="flex flex-row lg:flex-col gap-2 lg:w-52">
-                      <Select value={o.status} onValueChange={(v) => updateOrder(o.id, { status: v })}>
-                        <SelectTrigger className={`${STATUS_STYLES[o.status] || ''}`}><SelectValue /></SelectTrigger>
-                        <SelectContent>{STATUS_STEPS.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
-                      </Select>
-                      <div className="flex gap-2">
-                        <Button size="sm" variant="secondary" className="flex-1 gap-1" onClick={() => setEditing(o)}><Pencil className="h-3.5 w-3.5" /> Details</Button>
-                        <Button size="sm" variant="ghost" className="text-destructive" onClick={() => deleteOrder(o.id)}><Trash2 className="h-4 w-4" /></Button>
-                      </div>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </motion.div>
-          ))}
-        </div>
-      )}
+        </TabsContent>
+      </Tabs>
 
       {/* Detail-/Bearbeiten-Dialog */}
       <Dialog open={!!editing} onOpenChange={(v) => !v && setEditing(null)}>

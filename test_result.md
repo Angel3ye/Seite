@@ -303,11 +303,14 @@ frontend:
     file: "app/page.js"
     stuck_count: 0
     priority: "high"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
         -working: "NA"
         -agent: "main"
         -comment: "Login admin/Admin123!. Dashboard zeigt Auftraege, Status per Dropdown aenderbar, Details-Dialog fuer Bearbeitung/Fotos/Notizen, Loeschen mit Bestaetigung."
+        -working: "NA"
+        -agent: "main"
+        -comment: "UI-Umbau: Dashboard in zwei Tabs aufgeteilt (shadcn Tabs) - 'Auftraege' (Statistik + Auftragsliste) und 'Konfiguration' (Materialien + Farben). Visuell per Screenshot verifiziert: beide Tabs rendern und wechseln korrekt. Nur Frontend-Umstrukturierung, keine Backend-Aenderung."
 
 metadata:
   created_by: "main_agent"
