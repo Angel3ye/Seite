@@ -227,6 +227,59 @@ async function fetchMakerworldPreview(url, printer = '') {
 }
 
 // =============================================================
+// Leichtgewichtig: NUR das Vorschaubild + Modellname von MakerWorld
+// (bewusst OHNE Gramm/Druckzeit - die bleiben manuelle Eingaben).
+// Nutzt Firecrawl-Metadaten (og:image), Fallback: einfacher OG-Abruf.
+// =============================================================
+async function fetchMakerworldImage(url) {
+  const out = { image: null, modelName: null }
+  if (!url) return out
+  const cleanTitle = (t) => t
+    ? t.replace(/\s*[-–|]\s*Free 3D Print Model\s*[-–|]\s*MakerWorld\s*$/i, '')
+        .replace(/\s*[-–|]\s*MakerWorld\s*$/i, '').trim()
+    : t
+  const pickImage = (img) => Array.isArray(img) ? (img[0] || null) : (img || null)
+
+  const key = process.env.FIRECRAWL_API_KEY
+  if (key) {
+    try {
+      const res = await fetch('https://api.firecrawl.dev/v1/scrape', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url, formats: ['markdown'] }),
+      })
+      const data = await res.json()
+      const m = (data && data.data && data.data.metadata) || {}
+      const image = pickImage(m.ogImage || m['og:image'])
+      const modelName = cleanTitle(m.ogTitle || m.title)
+      if (image || modelName) {
+        out.image = image
+        out.modelName = modelName || null
+        return out
+      }
+    } catch (e) { /* Fallback unten */ }
+  }
+
+  // Fallback: einfacher Abruf der OG-Meta (klappt oft nicht wegen Cloudflare)
+  try {
+    const res = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml',
+      },
+      redirect: 'follow',
+    })
+    if (res.ok) {
+      const html = await res.text()
+      out.image = metaContent(html, 'og:image') || metaContent(html, 'twitter:image') || null
+      out.modelName = cleanTitle(metaContent(html, 'og:title') || metaContent(html, 'twitter:title')) || null
+    }
+  } catch (e) { /* ignorieren */ }
+  return out
+}
+
+
+// =============================================================
 // Hilfsfunktionen fuer IDs / Codes
 // =============================================================
 function genOrderNumber() {
@@ -439,6 +492,22 @@ async function handler(request) {
       })
 
       const now = new Date().toISOString()
+
+      // Vorschaubild + Modellname von MakerWorld laden (best effort, max. 12s).
+      // Gramm/Druckzeit bleiben bewusst manuelle Eingaben.
+      let fetchedImg = { image: null, modelName: null }
+      try {
+        fetchedImg = await Promise.race([
+          fetchMakerworldImage(body.makerworldLink),
+          new Promise((r) => setTimeout(() => r({ image: null, modelName: null }), 12000)),
+        ])
+      } catch (e) { /* ignorieren */ }
+      const model = {
+        ...(body.model || {}),
+        ...(fetchedImg.image ? { image: fetchedImg.image } : {}),
+        ...(fetchedImg.modelName ? { modelName: fetchedImg.modelName } : {}),
+      }
+
       const order = {
         id: uuidv4(),
         orderNumber: genOrderNumber(),
@@ -452,7 +521,7 @@ async function handler(request) {
         quantity: parseInt(body.quantity) || 1,
         priority: body.priority || 'Normal',
         notes: body.notes || '',
-        model: body.model || null,   // { modelName, image, description, printTime, filamentGrams, printHours }
+        model: Object.keys(model).length ? model : null,   // { modelName, image, filamentGrams, printHours }
         price,
         status: 'Eingegangen',
         statusHistory: [{ status: 'Eingegangen', at: now }],
@@ -486,6 +555,24 @@ async function handler(request) {
       if (!isAuthed(request)) return json({ error: 'Nicht autorisiert' }, 401)
       const all = await orders.find({}).sort({ createdAt: -1 }).toArray()
       return json({ orders: all.map(sanitize) })
+    }
+
+    // --- ADMIN: Vorschaubild (neu) laden ---
+    if (seg[0] === 'orders' && seg.length === 3 && seg[2] === 'fetch-image' && method === 'POST') {
+      if (!isAuthed(request)) return json({ error: 'Nicht autorisiert' }, 401)
+      const id = seg[1]
+      const existing = await orders.findOne({ id })
+      if (!existing) return json({ error: 'Auftrag nicht gefunden' }, 404)
+      const fetched = await fetchMakerworldImage(existing.makerworldLink)
+      if (!fetched.image) return json({ ok: false, error: 'Kein Bild gefunden' })
+      const model = {
+        ...(existing.model || {}),
+        image: fetched.image,
+        ...(fetched.modelName ? { modelName: fetched.modelName } : {}),
+      }
+      await orders.updateOne({ id }, { $set: { model, updatedAt: new Date().toISOString() } })
+      const updated = await orders.findOne({ id })
+      return json({ ok: true, order: sanitize(updated) })
     }
 
     // --- ADMIN: Auftrag aktualisieren ---

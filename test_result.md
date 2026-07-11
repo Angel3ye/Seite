@@ -105,6 +105,21 @@
 user_problem_statement: "3D Druck Service - privates Auftragsportal. Auftragsformular mit MakerWorld-Vorschau, Preisschaetzung, Kundencode-Status-Tracking, geschuetzter Admin-Bereich (admin/Admin123!) mit Auftragsverwaltung (Status aendern, bearbeiten, loeschen, Fotos hochladen). Next.js + MongoDB."
 
 backend:
+  - task: "MakerWorld Vorschaubild laden (auto bei Auftrag + POST /api/orders/:id/fetch-image)"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "NEU: Beim Auftrag erstellen wird via Firecrawl NUR das Vorschaubild (og:image) + Modellname von der MakerWorld-URL geladen und in order.model.image/modelName gespeichert (max 12s, best effort - Gramm/Zeit bleiben manuell). Zusaetzlich Admin-Endpunkt POST /api/orders/:id/fetch-image (Bearer Auth) zum Nachladen/Aktualisieren des Bildes fuer bestehende Auftraege -> liefert {ok:true, order} oder {ok:false, error:'Kein Bild gefunden'}. Ohne Auth 401. Firecrawl-Bildabruf manuell verifiziert (og:image kam korrekt zurueck). Zu testen: (1) POST /api/orders mit gueltigem makerworldLink (z.B. https://makerworld.com/en/models/1211525) -> 200, danach Admin GET /api/orders: order.model.image ist eine URL. (2) POST /api/orders/:id/fetch-image mit Auth -> 200 ok:true, order.model.image gesetzt. (3) ohne Auth -> 401. (4) ungueltige/nicht existierende id -> 404."
+        -working: true
+        -agent: "testing"
+        -comment: "✅ TESTED (22/22 tests passed): SCENARIO 1 - Auto image fetch on order creation: POST /api/orders with makerworldLink (https://makerworld.com/en/models/1211525) -> 200 OK, ok:true, orderNumber (3D-558586), customerCode (E6TABW2F), quick response (3.403s). Admin GET /api/orders confirmed order.model.image is a valid URL (https://makerworld.bblmw.com/makerworld/model/USd7effb5cd9a105/design/2025-03-15_fdf7f01d8ab43.jpg...), order.model.modelName exists ('Understructure for Piranha Plant Switch Dock'). Manual values preserved: filamentGrams=45, printHours=3. No MongoDB _id leak. SCENARIO 2 - Manual fetch-image endpoint: POST /api/orders/:id/fetch-image with Bearer auth -> 200 OK, ok:true, order.model.image set to valid URL. SCENARIO 3 - Auth check: POST without Authorization header -> 401 (as expected). SCENARIO 4 - Not found: POST with nonexistent ID -> 404 (as expected). SCENARIO 5 - Regression: Order creation still quick (1.956s), no MongoDB _id leaks, GET /api/orders/track works correctly with all fields present, email NOT exposed in tracking (privacy maintained). All scenarios verified successfully."
+
   - task: "MakerWorld Vorschau (POST /api/makerworld-preview)"
     implemented: true
     working: true
@@ -334,7 +349,8 @@ metadata:
   run_ui: true
 
 test_plan:
-  current_focus: []
+  current_focus:
+    - "MakerWorld Vorschaubild laden (auto bei Auftrag + POST /api/orders/:id/fetch-image)"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
@@ -356,3 +372,8 @@ agent_communication:
     -message: "NEUE FUNKTION: E-Mail-Benachrichtigungen via GMX SMTP. Optionales E-Mail-Feld im Auftragsformular. Bei Auftragseingang -> Bestätigungsmail. Bei Statuswechsel auf 'Abholbereit' -> Abhol-Mail. Versand ist best-effort (fire-and-forget). Bitte testen: (1) POST /api/orders mit email -> 200, schnelle Antwort; (2) Admin GET /api/orders zeigt email; (3) POST ohne email -> 200, email=''; (4) PUT status='Abholbereit' -> 200; (5) Auth-Check; (6) GET /api/email-status; (7) Regression: GET /api/orders/track darf email NICHT zeigen."
     -agent: "testing"
     -message: "✅ EMAIL NOTIFICATION FEATURE FULLY TESTED (26/26 tests passed). All scenarios from review request verified: (1) POST /api/orders WITH email (jannik-druck@gmx.de) -> 200 OK, ok:true, orderNumber (3D-XXXXXX), customerCode (8 chars), quick response (0.206s, email is async/non-blocking). (2) Admin GET /api/orders -> email field stored correctly, no MongoDB _id leak. (3) POST /api/orders WITHOUT email -> 200 OK, email stored as empty string (''). (4) PUT status='Abholbereit' with auth -> 200 OK, status updated, quick response (0.178s, pickup email sent async). (5) PUT without auth -> 401. (6) GET /api/email-status: without auth -> 401, with auth -> 200 OK, ok:true (SMTP verified). (7) Regression: GET /api/orders/track does NOT expose email field (privacy maintained), all other fields work correctly. Email sending is fire-and-forget (best-effort with .catch), never blocks API responses. All backend APIs working correctly."
+
+    -agent: "main"
+    -message: "NEUE FUNKTION: MakerWorld Vorschaubild laden. Beim Auftrag erstellen wird via Firecrawl NUR das Vorschaubild (og:image) + Modellname von der MakerWorld-URL geladen (max 12s, best effort - Gramm/Zeit bleiben manuell). Zusaetzlich Admin-Endpunkt POST /api/orders/:id/fetch-image (Bearer Auth) zum Nachladen/Aktualisieren des Bildes. Bitte testen: (1) POST /api/orders mit makerworldLink -> 200, danach Admin GET /api/orders: order.model.image ist eine URL. (2) POST /api/orders/:id/fetch-image mit Auth -> 200 ok:true. (3) ohne Auth -> 401. (4) ungueltige id -> 404. (5) Regression: Auftragserstellung schnell, kein _id leak, Tracking funktioniert."
+    -agent: "testing"
+    -message: "✅ MAKERWORLD IMAGE FEATURE FULLY TESTED (22/22 tests passed). SCENARIO 1 - Auto image fetch: POST /api/orders with makerworldLink (https://makerworld.com/en/models/1211525) -> 200 OK in 3.403s, order.model.image is valid URL (https://makerworld.bblmw.com/...), order.model.modelName exists, manual filamentGrams=45 and printHours=3 preserved. SCENARIO 2 - Manual fetch: POST /api/orders/:id/fetch-image with auth -> 200 OK, ok:true, image URL set. SCENARIO 3 - Auth: POST without auth -> 401. SCENARIO 4 - Not found: POST with nonexistent ID -> 404. SCENARIO 5 - Regression: Order creation quick (1.956s), no MongoDB _id leaks, tracking works, email NOT exposed. All backend APIs working correctly. Ready for user acceptance."

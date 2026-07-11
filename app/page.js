@@ -836,6 +836,22 @@ function AdminView() {
     await updateOrder(order.id, { photos: [...(order.photos || []), ...base64s] })
   }
 
+  const [fetchingImg, setFetchingImg] = useState(null)
+  const fetchImage = async (id) => {
+    setFetchingImg(id)
+    try {
+      const res = await fetch(`/api/orders/${id}/fetch-image`, {
+        method: 'POST', headers: { Authorization: `Bearer ${token}` },
+      })
+      const data = await res.json()
+      if (!res.ok || !data.ok) throw new Error(data.error || 'Kein Bild gefunden')
+      setOrders((os) => os.map((o) => (o.id === id ? data.order : o)))
+      if (editing?.id === id) setEditing(data.order)
+      toast.success('Bild geladen')
+    } catch (e) { toast.error(e.message || 'Bild konnte nicht geladen werden') }
+    finally { setFetchingImg(null) }
+  }
+
   // ---- Login-Ansicht ----
   if (!token) {
     return (
@@ -905,8 +921,14 @@ function AdminView() {
                 <CardContent className="p-4">
                   <div className="flex flex-col lg:flex-row gap-4">
                     {/* Bild */}
-                    <div className="h-24 w-24 shrink-0 rounded-lg overflow-hidden bg-muted grid place-items-center">
-                      {o.model?.image ? <img src={o.model.image} alt="" className="h-full w-full object-cover" /> : <Printer className="h-8 w-8 text-muted-foreground" />}
+                    <div className="flex flex-col items-center gap-1.5 shrink-0">
+                      <div className="h-24 w-24 rounded-lg overflow-hidden bg-muted grid place-items-center">
+                        {o.model?.image ? <img src={o.model.image} alt="" className="h-full w-full object-cover" /> : <Printer className="h-8 w-8 text-muted-foreground" />}
+                      </div>
+                      <Button size="sm" variant="ghost" className="h-7 gap-1 text-xs px-2" disabled={fetchingImg === o.id} onClick={() => fetchImage(o.id)}>
+                        {fetchingImg === o.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <ImageIcon className="h-3 w-3" />}
+                        {o.model?.image ? 'Bild neu laden' : 'Bild laden'}
+                      </Button>
                     </div>
                     {/* Infos */}
                     <div className="flex-1 min-w-0">
