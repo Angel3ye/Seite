@@ -273,6 +273,21 @@ backend:
         -comment: "NEU: PUT /api/orders/:id akzeptiert Feld 'customerMessage'. Nach Update muss GET /api/orders/track?code= die gesetzte customerMessage zurueckgeben. Ohne Auth 401."
 
 frontend:
+  - task: "E-Mail-Benachrichtigungen via GMX SMTP (Bestätigung + Abholbereit)"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js, lib/email.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: true
+        -agent: "main"
+        -comment: "NEU: nodemailer + GMX SMTP (mail.gmx.net:587 STARTTLS). Optionales E-Mail-Feld im Auftragsformular. Bei Auftragseingang -> Bestätigungsmail mit orderNumber+customerCode. Bei Statuswechsel auf 'Abholbereit' -> Abhol-Mail (nur beim Wechsel, nicht wiederholt). Versand ist best-effort (Fehler brechen Auftrag/Update nicht ab). SMTP-Verbindung + echter Mailversand manuell verifiziert (VERIFY_OK + SEND_OK an jannik-druck@gmx.de). Zu testen: (1) POST /api/orders mit 'email' -> 200, Feld gespeichert; (2) Admin GET /api/orders enthaelt 'email'; (3) PUT /api/orders/:id status='Abholbereit' -> 200; (4) Auftrag OHNE email funktioniert weiterhin. Fuer echte Sends bitte email=jannik-druck@gmx.de nutzen (Delivery bereits manuell bestaetigt)."
+        -working: true
+        -agent: "testing"
+        -comment: "✅ TESTED (26/26 tests passed): (1) POST /api/orders WITH email (jannik-druck@gmx.de) -> 200 OK, ok:true, orderNumber (3D-XXXXXX), customerCode (8 chars), quick response (0.206s, email is async/non-blocking). (2) Admin GET /api/orders -> email field stored correctly (jannik-druck@gmx.de), no MongoDB _id leak. (3) POST /api/orders WITHOUT email -> 200 OK, email stored as empty string (''). (4) PUT /api/orders/:id status='Abholbereit' with auth -> 200 OK, status updated, quick response (0.178s, pickup email sent async). (5) PUT without auth -> 401 as expected. (6) GET /api/email-status without auth -> 401. (7) GET /api/email-status with auth -> 200 OK, ok:true (SMTP verified). (8) Regression: GET /api/orders/track does NOT expose email field (privacy maintained), all other fields (orderNumber, customerCode, status, queueAhead, customerMessage) work correctly. Email sending is fire-and-forget (best-effort with .catch), never blocks API responses. All scenarios from review request verified."
+
   - task: "Startseite + Auftragsformular + Live-Preis + Erfolgsdialog"
     implemented: true
     working: "NA"
@@ -315,13 +330,11 @@ frontend:
 metadata:
   created_by: "main_agent"
   version: "1.0"
-  test_sequence: 1
+  test_sequence: 2
   run_ui: true
 
 test_plan:
-  current_focus:
-    - "Warteschlangen-Position + Kundennachricht im Tracking (GET /api/orders/track)"
-    - "Kundennachricht speichern (PUT /api/orders/:id customerMessage, Auth)"
+  current_focus: []
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
@@ -339,3 +352,7 @@ agent_communication:
     -message: "NEUE FUNKTIONEN: (1) queueAhead in GET /api/orders/track - zeigt Anzahl offener Auftraege die frueher erstellt wurden. (2) customerMessage in PUT /api/orders/:id - Admin kann Nachricht fuer Kunden setzen, die dann im Tracking erscheint. Bitte beide Features testen."
     -agent: "testing"
     -message: "✅ NEW FEATURES FULLY TESTED (11/11 tests passed). FEATURE 1 - queueAhead: Logic working correctly. Order B shows queueAhead=10 when 10 orders ahead. After marking Order A as 'Abgeschlossen', queueAhead decreased to 9. Completed orders show queueAhead=0. Counts only open orders (status NOT in [Fertig, Abholbereit, Abgeschlossen]) created earlier. FEATURE 2 - customerMessage: PUT without auth returns 401. With auth, message saved successfully. GET /api/orders/track returns saved message. Regression tests passed: existing tracking fields work, invalid code returns 404, no MongoDB _id leaks. All backend APIs working correctly."
+    -agent: "main"
+    -message: "NEUE FUNKTION: E-Mail-Benachrichtigungen via GMX SMTP. Optionales E-Mail-Feld im Auftragsformular. Bei Auftragseingang -> Bestätigungsmail. Bei Statuswechsel auf 'Abholbereit' -> Abhol-Mail. Versand ist best-effort (fire-and-forget). Bitte testen: (1) POST /api/orders mit email -> 200, schnelle Antwort; (2) Admin GET /api/orders zeigt email; (3) POST ohne email -> 200, email=''; (4) PUT status='Abholbereit' -> 200; (5) Auth-Check; (6) GET /api/email-status; (7) Regression: GET /api/orders/track darf email NICHT zeigen."
+    -agent: "testing"
+    -message: "✅ EMAIL NOTIFICATION FEATURE FULLY TESTED (26/26 tests passed). All scenarios from review request verified: (1) POST /api/orders WITH email (jannik-druck@gmx.de) -> 200 OK, ok:true, orderNumber (3D-XXXXXX), customerCode (8 chars), quick response (0.206s, email is async/non-blocking). (2) Admin GET /api/orders -> email field stored correctly, no MongoDB _id leak. (3) POST /api/orders WITHOUT email -> 200 OK, email stored as empty string (''). (4) PUT status='Abholbereit' with auth -> 200 OK, status updated, quick response (0.178s, pickup email sent async). (5) PUT without auth -> 401. (6) GET /api/email-status: without auth -> 401, with auth -> 200 OK, ok:true (SMTP verified). (7) Regression: GET /api/orders/track does NOT expose email field (privacy maintained), all other fields work correctly. Email sending is fire-and-forget (best-effort with .catch), never blocks API responses. All backend APIs working correctly."

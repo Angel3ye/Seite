@@ -229,7 +229,7 @@ function InfoHint({ children }) {
 
 function HomeView({ setView, setLastOrder }) {
   const [form, setForm] = useState({
-    name: '', makerworldLink: '', color: '',
+    name: '', email: '', makerworldLink: '', color: '',
     material: 'PLA', size: 100, quantity: 1, priority: 'Normal', notes: '',
   })
   const [submitting, setSubmitting] = useState(false)
@@ -271,6 +271,7 @@ function HomeView({ setView, setLastOrder }) {
 
   const submit = async () => {
     if (!form.name.trim()) return toast.error('Bitte gib deinen Namen an.')
+    if (form.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) return toast.error('Bitte gib eine gültige E-Mail-Adresse an (oder lass das Feld leer).')
     if (!/^https?:\/\//i.test(form.makerworldLink)) return toast.error('Bitte gib einen gültigen MakerWorld-Link an.')
     if (!manual.grams || Number(manual.grams) <= 0) return toast.error('Bitte gib den Filamentverbrauch in Gramm an.')
     if (!manual.hours || Number(manual.hours) <= 0) return toast.error('Bitte gib die Druckzeit in Stunden an.')
@@ -332,6 +333,15 @@ function HomeView({ setView, setLastOrder }) {
             <div className="space-y-2">
               <Label>Name</Label>
               <Input placeholder="Dein Name" value={form.name} onChange={(e) => set('name', e.target.value)} />
+            </div>
+
+            {/* E-Mail (optional) */}
+            <div className="space-y-2">
+              <Label className="flex items-center gap-1.5">
+                E-Mail <span className="text-xs font-normal text-muted-foreground">(optional)</span>
+              </Label>
+              <Input type="email" placeholder="dein.name@beispiel.de" value={form.email} onChange={(e) => set('email', e.target.value)} />
+              <p className="text-xs text-muted-foreground">Wenn du deine E-Mail angibst, bekommst du eine Bestätigung und eine Info, sobald dein Druck abholbereit ist.</p>
             </div>
 
             {/* MakerWorld-Link */}
@@ -1086,6 +1096,7 @@ function AdminView() {
 
                 <div className="rounded-lg bg-muted/30 p-3 text-sm space-y-1">
                   <div className="flex justify-between"><span className="text-muted-foreground">Kundencode</span><span className="font-mono text-primary">{editing.customerCode}</span></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">E-Mail</span><span className="font-medium">{editing.email ? editing.email : <span className="text-muted-foreground italic">keine angegeben</span>}</span></div>
                   <div className="flex justify-between"><span className="text-muted-foreground">Geschätzter Preis</span><span className="font-semibold text-primary">ca. {eur(editing.price?.total)}</span></div>
                   <a href={editing.makerworldLink} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-accent hover:underline pt-1"><ExternalLink className="h-3.5 w-3.5" /> MakerWorld-Link</a>
                 </div>
