@@ -1,7 +1,7 @@
 import { MongoClient } from 'mongodb'
 import { v4 as uuidv4 } from 'uuid'
 import { NextResponse } from 'next/server'
-import { sendOrderConfirmationEmail, sendPickupReadyEmail, verifyEmailConnection } from '@/lib/email'
+import { sendOrderConfirmationEmail, sendPickupReadyEmail, sendAdminNewOrderEmail, verifyEmailConnection } from '@/lib/email'
 
 // =============================================================
 // MongoDB-Verbindung (serverless-sicher: globale, wiederverwendete
@@ -483,18 +483,10 @@ async function handler(request) {
         return json({ error: 'Name und MakerWorld-Link sind erforderlich' }, 400)
       }
 
-      const price = calcPrice({
-        grams: body.model?.filamentGrams,
-        hours: body.model?.printHours,
-        size: parseInt(body.size) || 100,
-        quantity: parseInt(body.quantity) || 1,
-        priority: body.priority || 'Normal',
-      })
-
       const now = new Date().toISOString()
 
       // Vorschaubild + Modellname von MakerWorld laden (best effort, max. 12s).
-      // Gramm/Druckzeit bleiben bewusst manuelle Eingaben.
+      // Gramm/Druckzeit + Preis werden spaeter vom Admin eingetragen.
       let fetchedImg = { image: null, modelName: null }
       try {
         fetchedImg = await Promise.race([
@@ -522,7 +514,7 @@ async function handler(request) {
         priority: body.priority || 'Normal',
         notes: body.notes || '',
         model: Object.keys(model).length ? model : null,   // { modelName, image, filamentGrams, printHours }
-        price,
+        price: null,   // wird vom Admin nach Pruefung (Gramm/Zeit) berechnet
         status: 'Eingegangen',
         statusHistory: [{ status: 'Eingegangen', at: now }],
         photos: [],
@@ -532,15 +524,26 @@ async function handler(request) {
       }
       await orders.insertOne(order)
 
-      // Bestätigungs-Mail (best effort – Fehler brechen den Auftrag nicht ab)
+      // Direkter Link zur Status-Seite (mit vorausgefuelltem Code)
+      const baseUrl = (process.env.NEXT_PUBLIC_BASE_URL || '').replace(/\/$/, '')
+      const trackingUrl = baseUrl ? `${baseUrl}/?track=${order.customerCode}` : ''
+
+      // Bestätigungs-Mail an den Kunden (best effort)
       if (order.email) {
         sendOrderConfirmationEmail({
           to: order.email,
           name: order.name,
           orderNumber: order.orderNumber,
           customerCode: order.customerCode,
+          trackingUrl,
         }).catch((err) => console.error('E-Mail (Bestätigung) fehlgeschlagen:', err?.message || err))
       }
+
+      // Info-Mail an den Betreiber (Jannik) mit den wichtigsten Daten (best effort)
+      sendAdminNewOrderEmail({
+        order,
+        trackingUrl,
+      }).catch((err) => console.error('E-Mail (Admin-Info) fehlgeschlagen:', err?.message || err))
 
       return json({
         ok: true,
@@ -585,9 +588,14 @@ async function handler(request) {
 
       const now = new Date().toISOString()
       const update = { updatedAt: now }
-      const allowed = ['status', 'adminNotes', 'notes', 'color', 'material', 'size', 'quantity', 'priority', 'photos', 'model', 'customerMessage', 'email']
+      const allowed = ['status', 'adminNotes', 'notes', 'color', 'material', 'size', 'quantity', 'priority', 'photos', 'customerMessage', 'email']
       for (const k of allowed) {
         if (body[k] !== undefined) update[k] = body[k]
+      }
+      
+      // Merge model fields (preserve existing image/modelName when setting grams/hours)
+      if (body.model !== undefined) {
+        update.model = { ...(existing.model || {}), ...body.model }
       }
 
       // Statusverlauf pflegen
@@ -623,6 +631,11 @@ async function handler(request) {
           name: updated.name,
           orderNumber: updated.orderNumber,
           customerCode: updated.customerCode,
+          priceTotal: updated.price?.total ?? null,
+          trackingUrl: (() => {
+            const b = (process.env.NEXT_PUBLIC_BASE_URL || '').replace(/\/$/, '')
+            return b ? `${b}/?track=${updated.customerCode}` : ''
+          })(),
         }).catch((err) => console.error('E-Mail (Abholbereit) fehlgeschlagen:', err?.message || err))
       }
 

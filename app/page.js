@@ -233,7 +233,6 @@ function HomeView({ setView, setLastOrder }) {
     material: 'PLA', size: 100, quantity: 1, priority: 'Normal', notes: '',
   })
   const [submitting, setSubmitting] = useState(false)
-  const [manual, setManual] = useState({ grams: '', hours: '' })
   const [colors, setColors] = useState(COLORS)
   const [materials, setMaterials] = useState(MATERIALS)
 
@@ -262,35 +261,19 @@ function HomeView({ setView, setLastOrder }) {
 
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }))
 
-  const hasDetails = !!(manual.grams || manual.hours)
-
-  const price = useMemo(() => calcPrice({
-    grams: manual.grams, hours: manual.hours,
-    size: form.size, quantity: form.quantity, priority: form.priority,
-  }), [manual.grams, manual.hours, form.size, form.quantity, form.priority])
-
   const submit = async () => {
     if (!form.name.trim()) return toast.error('Bitte gib deinen Namen an.')
     if (form.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) return toast.error('Bitte gib eine gültige E-Mail-Adresse an (oder lass das Feld leer).')
     if (!/^https?:\/\//i.test(form.makerworldLink)) return toast.error('Bitte gib einen gültigen MakerWorld-Link an.')
-    if (!manual.grams || Number(manual.grams) <= 0) return toast.error('Bitte gib den Filamentverbrauch in Gramm an.')
-    if (!manual.hours || Number(manual.hours) <= 0) return toast.error('Bitte gib die Druckzeit in Stunden an.')
     setSubmitting(true)
     try {
-      const model = (manual.grams || manual.hours)
-        ? {
-            manual: true,
-            filamentGrams: Number(manual.grams) || undefined,
-            printHours: Number(manual.hours) || undefined,
-          }
-        : null
       const res = await fetch('/api/orders', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...form, model }),
+        body: JSON.stringify({ ...form }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Fehler')
-      setLastOrder({ orderNumber: data.orderNumber, customerCode: data.customerCode, price: data.price })
+      setLastOrder({ orderNumber: data.orderNumber, customerCode: data.customerCode })
     } catch (e) {
       toast.error(e.message || 'Auftrag konnte nicht gesendet werden.')
     } finally {
@@ -326,7 +309,7 @@ function HomeView({ setView, setLastOrder }) {
         <Card className="glass-card border-border/60 shadow-2xl">
           <CardHeader>
             <CardTitle className="flex items-center gap-2"><ClipboardList className="h-5 w-5 text-primary" /> Druckauftrag</CardTitle>
-            <CardDescription>Fülle die Felder aus – der Schätzpreis wird automatisch berechnet.</CardDescription>
+            <CardDescription>Fülle die Felder aus und sende mir deinen Auftrag – den Preis lege ich nach Prüfung fest.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-5">
             {/* Name */}
@@ -364,32 +347,6 @@ function HomeView({ setView, setLastOrder }) {
                 value={form.makerworldLink}
                 onChange={(e) => set('makerworldLink', e.target.value)}
               />
-              <div className="grid sm:grid-cols-2 gap-3 rounded-lg border border-border bg-muted/20 p-3">
-                <div className="sm:col-span-2 text-xs font-medium text-muted-foreground">Filament &amp; Druckzeit (von der MakerWorld-Seite)</div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs flex items-center gap-1.5">
-                    Filament in g <span className="text-primary">*</span>
-                    <InfoHint>
-                      <p className="font-medium mb-1">Wo finde ich das Filament?</p>
-                      Auf der MakerWorld-Modellseite bei den <b>Druckprofilen</b> steht der Filamentverbrauch in
-                      Gramm (z. B. „45 g" – oft neben einem Spulen-Symbol 🧵). Diesen Wert hier eintragen.
-                    </InfoHint>
-                  </Label>
-                  <Input type="number" min={0} placeholder="z. B. 45" value={manual.grams} onChange={(e) => setManual((m) => ({ ...m, grams: e.target.value }))} />
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs flex items-center gap-1.5">
-                    Druckzeit in Std. <span className="text-primary">*</span>
-                    <InfoHint>
-                      <p className="font-medium mb-1">Wo finde ich die Druckzeit?</p>
-                      Ebenfalls beim <b>Druckprofil</b> auf MakerWorld (oft neben einem Uhr-Symbol 🕒), z. B. „4h 30m".
-                      Bitte in Stunden angeben: <b>4h 30m = 4,5</b> · 1h 15m = 1,25.
-                    </InfoHint>
-                  </Label>
-                  <Input type="number" min={0} step="0.5" placeholder="z. B. 3" value={manual.hours} onChange={(e) => setManual((m) => ({ ...m, hours: e.target.value }))} />
-                </div>
-                <div className="sm:col-span-2 text-xs text-muted-foreground">Alle mit <span className="text-primary">*</span> markierten Felder sind Pflicht – damit der Preis genau berechnet werden kann.</div>
-              </div>
             </div>
 
             {/* Farbe + Material */}
@@ -470,21 +427,13 @@ function HomeView({ setView, setLastOrder }) {
 
             <Separator />
 
-            {/* Preisvorschlag */}
-            <div className="rounded-xl border border-primary/30 bg-gradient-to-br from-primary/10 to-accent/5 p-5">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="text-sm text-muted-foreground">Geschätzter Preis</div>
-                  <div className="text-3xl font-bold text-primary">ca. {eur(price.total)}</div>
-                </div>
-                <Package className="h-10 w-10 text-primary/50" />
+            {/* Hinweis: Preis kommt nach Prüfung */}
+            <div className="rounded-xl border border-primary/30 bg-gradient-to-br from-primary/10 to-accent/5 p-5 flex items-center gap-4">
+              <Package className="h-9 w-9 text-primary/60 shrink-0" />
+              <div className="text-sm text-muted-foreground">
+                Den <span className="text-foreground font-medium">Preis</span> berechne ich nach Prüfung deines Modells und trage ihn ein –
+                du siehst ihn dann jederzeit über deinen Auftragscode auf der Status-Seite.
               </div>
-              <div className="mt-3 grid grid-cols-3 gap-2 text-xs text-muted-foreground">
-                <div className="rounded-md bg-background/40 p-2 text-center">Material<br /><span className="text-foreground font-medium">{eur(price.material)}</span></div>
-                <div className="rounded-md bg-background/40 p-2 text-center">Druckzeit<br /><span className="text-foreground font-medium">{eur(price.time)}</span></div>
-                <div className="rounded-md bg-background/40 p-2 text-center">Verschleiß<br /><span className="text-foreground font-medium">{eur(price.wear)}</span></div>
-              </div>
-              <p className="mt-3 text-xs text-muted-foreground">{hasDetails ? '' : 'Grobe Schätzung ohne genaue Modelldaten (Standardannahme ~25 g / 2 Std.). '}Der endgültige Preis wird nach Prüfung des Modells bestätigt.</p>
             </div>
 
             <Button className="w-full gap-2 h-12 text-base" onClick={submit} disabled={submitting}>
@@ -528,7 +477,7 @@ function SuccessDialog({ order, onClose, goTrack }) {
               <Button size="icon" variant="ghost" onClick={() => copy(order.customerCode)}><Copy className="h-4 w-4" /></Button>
             </div>
           </div>
-          <div className="text-center text-sm text-muted-foreground">Geschätzter Preis: <span className="text-primary font-semibold">ca. {eur(order.price?.total)}</span></div>
+          <div className="text-center text-sm text-muted-foreground">Den Preis trage ich nach Prüfung ein – du siehst ihn dann über deinen Auftragscode.</div>
         </div>
         <DialogFooter className="sm:justify-center gap-2">
           <Button variant="secondary" onClick={onClose}>Schließen</Button>
@@ -661,9 +610,19 @@ function TrackView({ initialCode }) {
                 )}
 
                 <div className="rounded-lg border border-primary/30 bg-primary/5 p-4 text-center">
-                  <div className="text-xs text-muted-foreground">Geschätzter Preis</div>
-                  <div className="text-2xl font-bold text-primary">ca. {eur(order.price?.total)}</div>
-                  <div className="text-xs text-muted-foreground mt-1">Unverbindlich – wird nach Prüfung bestätigt.</div>
+                  {order.price?.total != null ? (
+                    <>
+                      <div className="text-xs text-muted-foreground">Preis</div>
+                      <div className="text-2xl font-bold text-primary">ca. {eur(order.price?.total)}</div>
+                      <div className="text-xs text-muted-foreground mt-1">Von Jannik nach Prüfung des Modells festgelegt.</div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="text-xs text-muted-foreground">Preis</div>
+                      <div className="text-lg font-semibold text-muted-foreground">wird noch berechnet …</div>
+                      <div className="text-xs text-muted-foreground mt-1">Sobald ich dein Modell geprüft habe, erscheint der Preis hier.</div>
+                    </>
+                  )}
                 </div>
                 <a href={order.makerworldLink} target="_blank" rel="noreferrer" className="flex items-center justify-center gap-1.5 text-sm text-accent hover:underline">
                   <ExternalLink className="h-4 w-4" /> Modell auf MakerWorld ansehen
@@ -944,7 +903,7 @@ function AdminView() {
                         <span>Material: <b>{o.material}</b></span>
                         <span>Größe: <b>{o.size}%</b></span>
                         <span>Anzahl: <b>{o.quantity}</b></span>
-                        <span className="text-primary">Preis: <b>ca. {eur(o.price?.total)}</b></span>
+                        <span className="text-primary">Preis: <b>{o.price?.total != null ? `ca. ${eur(o.price?.total)}` : 'noch offen'}</b></span>
                       </div>
                     </div>
                     {/* Aktionen */}
@@ -1119,7 +1078,7 @@ function AdminView() {
                 <div className="rounded-lg bg-muted/30 p-3 text-sm space-y-1">
                   <div className="flex justify-between"><span className="text-muted-foreground">Kundencode</span><span className="font-mono text-primary">{editing.customerCode}</span></div>
                   <div className="flex justify-between"><span className="text-muted-foreground">E-Mail</span><span className="font-medium">{editing.email ? editing.email : <span className="text-muted-foreground italic">keine angegeben</span>}</span></div>
-                  <div className="flex justify-between"><span className="text-muted-foreground">Geschätzter Preis</span><span className="font-semibold text-primary">ca. {eur(editing.price?.total)}</span></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">Preis</span><span className="font-semibold text-primary">{editing.price?.total != null ? `ca. ${eur(editing.price?.total)}` : 'noch nicht berechnet'}</span></div>
                   <a href={editing.makerworldLink} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-accent hover:underline pt-1"><ExternalLink className="h-3.5 w-3.5" /> MakerWorld-Link</a>
                 </div>
 
@@ -1172,6 +1131,17 @@ export default function App() {
   const [view, setView] = useState('home')
   const [lastOrder, setLastOrder] = useState(null)
   const [trackCode, setTrackCode] = useState('')
+
+  // Direkter Status-Link aus der E-Mail: ?track=CODE öffnet die Status-Seite vorausgefüllt
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const params = new URLSearchParams(window.location.search)
+    const code = params.get('track')
+    if (code) {
+      setTrackCode(code.toUpperCase())
+      setView('track')
+    }
+  }, [])
 
   return (
     <MotionConfig reducedMotion="never">

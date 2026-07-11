@@ -105,6 +105,21 @@
 user_problem_statement: "3D Druck Service - privates Auftragsportal. Auftragsformular mit MakerWorld-Vorschau, Preisschaetzung, Kundencode-Status-Tracking, geschuetzter Admin-Bereich (admin/Admin123!) mit Auftragsverwaltung (Status aendern, bearbeiten, loeschen, Fotos hochladen). Next.js + MongoDB."
 
 backend:
+  - task: "Preis erst vom Admin (Auftrag ohne Gramm/Zeit/Preis) + E-Mail-Link + Admin-Info-Mail"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js, lib/email.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "GEAENDERT: POST /api/orders benoetigt KEINE Gramm/Zeit mehr und berechnet KEINEN Preis -> order.price = null. Preis entsteht erst, wenn Admin via PUT /api/orders/:id model.filamentGrams/printHours (oder size/quantity/priority) setzt -> dann wird price neu berechnet. Bestaetigungs-Mail enthaelt jetzt einen direkten Status-Link (NEXT_PUBLIC_BASE_URL/?track=CODE). NEU: Admin-Info-Mail an GMX_FROM_EMAIL (jannik-druck@gmx.de) bei JEDEM neuen Auftrag mit allen Kerndaten. Abhol-Mail enthaelt jetzt Preis (falls gesetzt) + Status-Link. Zu testen: (1) POST /api/orders nur mit name+makerworldLink -> 200, danach Admin GET /api/orders: order.price === null. (2) PUT /api/orders/:id mit {model:{filamentGrams:45,printHours:3}} + Auth -> 200, order.price.total > 0. (3) PUT status='Abholbereit' -> 200. (4) Track vor Preis: price null; nach Preis: price gesetzt. Emails best-effort (nie blockierend). Fuer Sends email=jannik-druck@gmx.de nutzen."
+        -working: true
+        -agent: "testing"
+        -comment: "✅ TESTED (26/26 tests passed): CHANGED PRICING FLOW VERIFIED. TEST 1 - Create minimal order WITHOUT grams/hours: POST /api/orders with name+email+makerworldLink -> 200 OK, ok:true, orderNumber (3D-598398), customerCode (LUBHLYKX), price=null (as expected). Response does NOT require grams/hours. TEST 1b - Admin GET /api/orders: order.price is null (not an object), no MongoDB _id leak. TEST 2 - Track before pricing: GET /api/orders/track?code -> 200, price=null, email NOT exposed (privacy maintained). TEST 3 - Admin sets grams/time: PUT /api/orders/:id with {model:{filamentGrams:45,printHours:3}} + Bearer auth -> 200 OK, ok:true, order.price.total=6.67 (numeric > 0). CRITICAL FIX APPLIED: model.image and modelName now preserved after setting grams (was being wiped, now merged correctly). TEST 4 - Track after pricing: price.total=6.67 (numeric value from TEST 3). TEST 5 - Eilig recalculation: PUT priority='Eilig' -> 200, price.total=8.34 (exactly 25% higher, ratio 1.250). TEST 6 - Status to Abholbereit: PUT status='Abholbereit' with auth -> 200, status updated, response quick (0.128s, email sent async/non-blocking). TEST 7-8 - Validation: POST without makerworldLink -> 400, POST without name -> 400 (as expected). TEST 9 - Auth: PUT without Authorization -> 401 (as expected). TEST 10 - Regression: GET /api/email-status with auth -> 200, ok:true. TEST 11 - Regression: No MongoDB _id leaks in tracking. All scenarios from review request verified successfully. Key findings: Orders created WITHOUT price (price=null), price calculated when admin sets grams/printHours, Eilig adds ~25% surcharge, email NOT exposed in tracking, validation and auth working correctly."
+
   - task: "MakerWorld Vorschaubild laden (auto bei Auftrag + POST /api/orders/:id/fetch-image)"
     implemented: true
     working: true
@@ -350,7 +365,7 @@ metadata:
 
 test_plan:
   current_focus:
-    - "MakerWorld Vorschaubild laden (auto bei Auftrag + POST /api/orders/:id/fetch-image)"
+    - "Preis erst vom Admin (Auftrag ohne Gramm/Zeit/Preis) + E-Mail-Link + Admin-Info-Mail"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
@@ -377,3 +392,7 @@ agent_communication:
     -message: "NEUE FUNKTION: MakerWorld Vorschaubild laden. Beim Auftrag erstellen wird via Firecrawl NUR das Vorschaubild (og:image) + Modellname von der MakerWorld-URL geladen (max 12s, best effort - Gramm/Zeit bleiben manuell). Zusaetzlich Admin-Endpunkt POST /api/orders/:id/fetch-image (Bearer Auth) zum Nachladen/Aktualisieren des Bildes. Bitte testen: (1) POST /api/orders mit makerworldLink -> 200, danach Admin GET /api/orders: order.model.image ist eine URL. (2) POST /api/orders/:id/fetch-image mit Auth -> 200 ok:true. (3) ohne Auth -> 401. (4) ungueltige id -> 404. (5) Regression: Auftragserstellung schnell, kein _id leak, Tracking funktioniert."
     -agent: "testing"
     -message: "✅ MAKERWORLD IMAGE FEATURE FULLY TESTED (22/22 tests passed). SCENARIO 1 - Auto image fetch: POST /api/orders with makerworldLink (https://makerworld.com/en/models/1211525) -> 200 OK in 3.403s, order.model.image is valid URL (https://makerworld.bblmw.com/...), order.model.modelName exists, manual filamentGrams=45 and printHours=3 preserved. SCENARIO 2 - Manual fetch: POST /api/orders/:id/fetch-image with auth -> 200 OK, ok:true, image URL set. SCENARIO 3 - Auth: POST without auth -> 401. SCENARIO 4 - Not found: POST with nonexistent ID -> 404. SCENARIO 5 - Regression: Order creation quick (1.956s), no MongoDB _id leaks, tracking works, email NOT exposed. All backend APIs working correctly. Ready for user acceptance."
+    -agent: "main"
+    -message: "GEAENDERTE FUNKTION: Preis erst vom Admin. Auftraege werden jetzt OHNE Gramm/Zeit/Preis erstellt (order.price = null). Preis wird erst berechnet, wenn Admin via PUT /api/orders/:id die Felder model.filamentGrams/printHours (oder size/quantity/priority) setzt. Bitte testen: (1) POST /api/orders nur mit name+makerworldLink -> 200, danach Admin GET /api/orders: order.price === null (nicht ein Objekt). (2) Track vor Preis: price null, email NICHT sichtbar. (3) PUT /api/orders/:id mit {model:{filamentGrams:45,printHours:3}} + Auth -> 200, order.price.total > 0. Verify model.image preserved. (4) Track nach Preis: price.total ist numerisch. (5) PUT priority='Eilig' -> price ~25% hoeher. (6) PUT status='Abholbereit' -> 200 (email async). (7) Validation: POST ohne name/link -> 400. (8) Auth: PUT ohne Auth -> 401. (9) Regression: kein _id leak, GET /api/email-status funktioniert. Fuer Sends email=jannik-druck@gmx.de nutzen."
+    -agent: "testing"
+    -message: "✅ CHANGED PRICING FLOW FULLY TESTED (26/26 tests passed). All scenarios from review request verified successfully. TEST 1 - Create minimal order WITHOUT grams/hours: POST /api/orders with name+email+makerworldLink -> 200 OK, ok:true, orderNumber (3D-598398), customerCode (LUBHLYKX), price=null (as expected). Response does NOT require grams/hours. TEST 1b - Admin GET /api/orders: order.price is null (not an object), no MongoDB _id leak. TEST 2 - Track before pricing: price=null, email NOT exposed (privacy maintained). TEST 3 - Admin sets grams/time: PUT with {model:{filamentGrams:45,printHours:3}} + auth -> 200, order.price.total=6.67 (numeric > 0). CRITICAL FIX APPLIED: model.image and modelName now preserved after setting grams (was being wiped, now merged correctly). TEST 4 - Track after pricing: price.total=6.67. TEST 5 - Eilig recalculation: price.total=8.34 (exactly 25% higher, ratio 1.250). TEST 6 - Status to Abholbereit: 200, response quick (0.128s, email async). TEST 7-8 - Validation: missing name/link -> 400. TEST 9 - Auth: PUT without auth -> 401. TEST 10 - GET /api/email-status with auth -> 200, ok:true. TEST 11 - No MongoDB _id leaks. All backend APIs working correctly. Ready for user acceptance."
