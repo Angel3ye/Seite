@@ -1,6 +1,7 @@
 import { MongoClient } from 'mongodb'
 import { v4 as uuidv4 } from 'uuid'
 import { NextResponse } from 'next/server'
+import { sendOrderConfirmationEmail, sendPickupReadyEmail, verifyEmailConnection } from '@/lib/email'
 
 // =============================================================
 // MongoDB-Verbindung (serverless-sicher: globale, wiederverwendete
@@ -376,6 +377,13 @@ async function handler(request) {
       return json({ error: 'Benutzername oder Passwort ist falsch' }, 401)
     }
 
+    // --- E-Mail-Verbindung testen (Admin) ---
+    if (seg[0] === 'email-status' && method === 'GET') {
+      if (!isAuthed(request)) return json({ error: 'Nicht autorisiert' }, 401)
+      const result = await verifyEmailConnection()
+      return json(result)
+    }
+
     // --- Auftrag verfolgen (oeffentlich, per Code) ---
     if (seg[0] === 'orders' && seg[1] === 'track' && method === 'GET') {
       const code = (searchParams.get('code') || '').trim().toUpperCase()
@@ -436,6 +444,7 @@ async function handler(request) {
         orderNumber: genOrderNumber(),
         customerCode: genCustomerCode(),
         name: body.name,
+        email: typeof body.email === 'string' ? body.email.trim() : '',
         makerworldLink: body.makerworldLink,
         color: body.color || 'Egal',
         material: body.material || 'PLA',
@@ -453,6 +462,17 @@ async function handler(request) {
         updatedAt: now,
       }
       await orders.insertOne(order)
+
+      // Bestätigungs-Mail (best effort – Fehler brechen den Auftrag nicht ab)
+      if (order.email) {
+        sendOrderConfirmationEmail({
+          to: order.email,
+          name: order.name,
+          orderNumber: order.orderNumber,
+          customerCode: order.customerCode,
+        }).catch((err) => console.error('E-Mail (Bestätigung) fehlgeschlagen:', err?.message || err))
+      }
+
       return json({
         ok: true,
         orderNumber: order.orderNumber,
@@ -478,7 +498,7 @@ async function handler(request) {
 
       const now = new Date().toISOString()
       const update = { updatedAt: now }
-      const allowed = ['status', 'adminNotes', 'notes', 'color', 'material', 'size', 'quantity', 'priority', 'photos', 'model', 'customerMessage']
+      const allowed = ['status', 'adminNotes', 'notes', 'color', 'material', 'size', 'quantity', 'priority', 'photos', 'model', 'customerMessage', 'email']
       for (const k of allowed) {
         if (body[k] !== undefined) update[k] = body[k]
       }
@@ -504,6 +524,21 @@ async function handler(request) {
 
       await orders.updateOne({ id }, { $set: update })
       const updated = await orders.findOne({ id })
+
+      // Abhol-Mail: nur wenn Status NEU auf "Abholbereit" wechselt
+      if (
+        body.status === 'Abholbereit' &&
+        existing.status !== 'Abholbereit' &&
+        updated?.email
+      ) {
+        sendPickupReadyEmail({
+          to: updated.email,
+          name: updated.name,
+          orderNumber: updated.orderNumber,
+          customerCode: updated.customerCode,
+        }).catch((err) => console.error('E-Mail (Abholbereit) fehlgeschlagen:', err?.message || err))
+      }
+
       return json({ ok: true, order: sanitize(updated) })
     }
 
