@@ -43,6 +43,19 @@ function json(data, status = 200) {
   return handleCORS(NextResponse.json(data, { status }))
 }
 
+// Wartet auf einen (Mail-)Versand, bricht aber nach `ms` ab, damit die
+// Anfrage auf Serverless (Vercel) nie haengt. Fehler werden nur geloggt.
+// Das AWAIT ist wichtig: sonst friert Vercel die Funktion nach der Antwort
+// ein und die Mail wird nie fertig gesendet.
+function withTimeout(promise, ms, label) {
+  return Promise.race([
+    Promise.resolve(promise)
+      .then((r) => { if (r && r.skipped) console.warn(`E-Mail (${label}) uebersprungen: SMTP nicht konfiguriert`); return r })
+      .catch((e) => console.error(`E-Mail (${label}) fehlgeschlagen:`, e?.message || e)),
+    new Promise((r) => setTimeout(() => r({ timeout: true }), ms)),
+  ])
+}
+
 export async function OPTIONS() {
   return handleCORS(new NextResponse(null, { status: 200 }))
 }
@@ -528,22 +541,24 @@ async function handler(request) {
       const baseUrl = (process.env.NEXT_PUBLIC_BASE_URL || '').replace(/\/$/, '')
       const trackingUrl = baseUrl ? `${baseUrl}/?track=${order.customerCode}` : ''
 
-      // Bestätigungs-Mail an den Kunden (best effort)
+      // E-Mails Vercel-sicher versenden: wir WARTEN (mit Timeout) auf den
+      // Versand, damit die Serverless-Funktion nicht vorher eingefroren wird.
+      const mailJobs = []
       if (order.email) {
-        sendOrderConfirmationEmail({
+        mailJobs.push(withTimeout(sendOrderConfirmationEmail({
           to: order.email,
           name: order.name,
           orderNumber: order.orderNumber,
           customerCode: order.customerCode,
           trackingUrl,
-        }).catch((err) => console.error('E-Mail (Bestätigung) fehlgeschlagen:', err?.message || err))
+        }), 12000, 'Bestätigung'))
       }
-
-      // Info-Mail an den Betreiber (Jannik) mit den wichtigsten Daten (best effort)
-      sendAdminNewOrderEmail({
+      // Info-Mail an den Betreiber (Jannik) mit den wichtigsten Daten
+      mailJobs.push(withTimeout(sendAdminNewOrderEmail({
         order,
         trackingUrl,
-      }).catch((err) => console.error('E-Mail (Admin-Info) fehlgeschlagen:', err?.message || err))
+      }), 12000, 'Admin-Info'))
+      await Promise.all(mailJobs)
 
       return json({
         ok: true,
@@ -620,13 +635,14 @@ async function handler(request) {
       await orders.updateOne({ id }, { $set: update })
       const updated = await orders.findOne({ id })
 
-      // Abhol-Mail: nur wenn Status NEU auf "Abholbereit" wechselt
+      // Abhol-Mail: nur wenn Status NEU auf "Abholbereit" wechselt.
+      // Vercel-sicher: wir WARTEN (mit Timeout) auf den Versand.
       if (
         body.status === 'Abholbereit' &&
         existing.status !== 'Abholbereit' &&
         updated?.email
       ) {
-        sendPickupReadyEmail({
+        await withTimeout(sendPickupReadyEmail({
           to: updated.email,
           name: updated.name,
           orderNumber: updated.orderNumber,
@@ -636,7 +652,7 @@ async function handler(request) {
             const b = (process.env.NEXT_PUBLIC_BASE_URL || '').replace(/\/$/, '')
             return b ? `${b}/?track=${updated.customerCode}` : ''
           })(),
-        }).catch((err) => console.error('E-Mail (Abholbereit) fehlgeschlagen:', err?.message || err))
+        }), 12000, 'Abholbereit')
       }
 
       return json({ ok: true, order: sanitize(updated) })
