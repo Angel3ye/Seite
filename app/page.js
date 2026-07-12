@@ -1125,48 +1125,6 @@ function AdminView() {
 }
 
 // =============================================================
-// Schwebende Deko-Figuren im Hintergrund (nur Start- & Status-Seite)
-// =============================================================
-const FLOATING_FIGURES = [
-  { e: '🦖', top: '12%', left: '5%',  size: 70, dur: 9,  delay: 0.0 },
-  { e: '🤖', top: '20%', left: '87%', size: 62, dur: 11, delay: 0.6 },
-  { e: '🚀', top: '66%', left: '8%',  size: 58, dur: 10, delay: 1.2 },
-  { e: '👾', top: '76%', left: '84%', size: 64, dur: 12, delay: 0.3 },
-  { e: '🐉', top: '44%', left: '93%', size: 66, dur: 13, delay: 1.5 },
-  { e: '🐙', top: '54%', left: '3%',  size: 56, dur: 10, delay: 0.9 },
-  { e: '👽', top: '5%',  left: '46%', size: 50, dur: 12, delay: 0.4 },
-  { e: '🦕', top: '87%', left: '43%', size: 60, dur: 11, delay: 1.1 },
-  { e: '🐱', top: '34%', left: '2%',  size: 48, dur: 9,  delay: 1.8 },
-  { e: '🦈', top: '14%', left: '68%', size: 54, dur: 12, delay: 0.7 },
-  { e: '🪐', top: '58%', left: '58%', size: 46, dur: 14, delay: 0.2 },
-  { e: '🎮', top: '30%', left: '28%', size: 44, dur: 10, delay: 1.4 },
-]
-
-function FloatingFigures() {
-  return (
-    <div className="pointer-events-none fixed inset-0 z-0 overflow-hidden" aria-hidden="true">
-      {FLOATING_FIGURES.map((f, i) => (
-        <motion.div
-          key={i}
-          className="absolute select-none will-change-transform"
-          style={{ top: f.top, left: f.left, fontSize: f.size, filter: 'drop-shadow(0 10px 28px rgba(139,92,246,0.45))' }}
-          initial={{ opacity: 0, y: 0, scale: 0.8 }}
-          animate={{ opacity: 0.22, y: [0, -24, 0], rotate: [0, 7, -7, 0], scale: 1 }}
-          transition={{
-            opacity: { duration: 1.4, delay: f.delay },
-            scale: { duration: 1.4, delay: f.delay },
-            y: { duration: f.dur, delay: f.delay, repeat: Infinity, ease: 'easeInOut' },
-            rotate: { duration: f.dur * 1.7, delay: f.delay, repeat: Infinity, ease: 'easeInOut' },
-          }}
-        >
-          {f.e}
-        </motion.div>
-      ))}
-    </div>
-  )
-}
-
-// =============================================================
 // Root-App
 // =============================================================
 export default function App() {
@@ -1189,8 +1147,7 @@ export default function App() {
     <MotionConfig reducedMotion="never">
     <div className="min-h-screen app-bg text-foreground">
       <Header view={view} setView={setView} />
-      {(view === 'home' || view === 'track') && <FloatingFigures />}
-      <main className="relative z-10">
+      <main>
         <AnimatePresence mode="wait">
           {view === 'home' && <motion.div key="home" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}><HomeView setView={setView} setLastOrder={setLastOrder} /></motion.div>}
           {view === 'track' && <motion.div key="track" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}><TrackView initialCode={trackCode} /></motion.div>}
@@ -1198,7 +1155,7 @@ export default function App() {
         </AnimatePresence>
       </main>
 
-      <footer className="relative z-10 border-t border-border/60 py-8 mt-10">
+      <footer className="border-t border-border/60 py-8 mt-10">
         <div className="container text-center text-sm text-muted-foreground">
           <div className="flex items-center justify-center gap-2 mb-2">
             <Printer className="h-4 w-4 text-primary" />
