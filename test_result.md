@@ -105,6 +105,21 @@
 user_problem_statement: "3D Druck Service - privates Auftragsportal. Auftragsformular mit MakerWorld-Vorschau, Preisschaetzung, Kundencode-Status-Tracking, geschuetzter Admin-Bereich (admin/Admin123!) mit Auftragsverwaltung (Status aendern, bearbeiten, loeschen, Fotos hochladen). Next.js + MongoDB."
 
 backend:
+  - task: "Auftrags-Reihenfolge aendern (PUT /api/orders/reorder + sortIndex, Queue-Bezug)"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "NEU: Auftraege haben jetzt ein Feld 'sortIndex' (Warteschlangen-Reihenfolge). (1) GET /api/orders (Admin) sortiert nach sortIndex aufsteigend; fehlender sortIndex wird lazy aus createdAt migriert und persistiert. (2) POST /api/orders setzt sortIndex=Date.now() -> neue Auftraege ans Ende. (3) NEU PUT /api/orders/reorder (Bearer Auth) body {orderedIds:[...]} setzt sortIndex=Index (0,1,2...) fuer alle IDs -> ohne Auth 401, leere Liste 400. (4) queueAhead im Track-Endpoint zaehlt jetzt offene Auftraege mit KLEINEREM sortIndex (=weiter vorne in der manuellen Reihenfolge) statt nach createdAt. Zu testen: 3 Auftraege anlegen, GET /api/orders Reihenfolge notieren, PUT reorder mit umgekehrter ID-Reihenfolge, erneut GET -> neue Reihenfolge; Track eines hinteren offenen Auftrags -> queueAhead entspricht Anzahl offener Auftraege davor; nach reorder aendert sich queueAhead entsprechend."
+        -working: true
+        -agent: "testing"
+        -comment: "✅ TESTED (ALL 7 SCENARIOS PASSED): REORDER FEATURE FULLY WORKING. SCENARIO 1 - Created 3 orders A, B, C: POST /api/orders -> 200 OK, each with sortIndex=Date.now() (A=1783955373120, B=1783955374497, C=1783955375643), orderNumber (3D-XXXXXX), customerCode (8 chars), status='Eingegangen'. SCENARIO 2 - GET /api/orders (admin): Returns orders sorted by sortIndex ascending, verified A < B < C. SCENARIO 3 - Reorder: PUT /api/orders/reorder with Bearer auth, body {orderedIds:[C.id, A.id, B.id]} -> 200 OK, ok:true. GET /api/orders again: sortIndex updated to reflect new order (C.sortIndex=0, A.sortIndex=1, B.sortIndex=2), verified C < A < B. SCENARIO 4 - Queue position reflects manual order: GET /api/orders/track for C -> queueAhead=0 (first in queue), A -> queueAhead=1 (one ahead), B -> queueAhead=3 (three ahead). Verified queueAhead_C < queueAhead_A < queueAhead_B. SCENARIO 5 - Queue shrinks when ahead-order completed: PUT /api/orders/C.id {status:'Abgeschlossen'} with auth -> 200 OK. Track B again -> queueAhead decreased from 3 to 2 (C no longer counts). Track C -> queueAhead=0 (completed orders always 0). SCENARIO 6 - Auth & validation: PUT /api/orders/reorder without Authorization -> 401. PUT with auth but empty body {} -> 400. PUT with auth but empty orderedIds [] -> 400. SCENARIO 7 - Regression: No MongoDB _id leaks in GET /api/orders. GET /api/orders/track does NOT expose email (privacy maintained). Existing PUT /api/orders/:id (status update) -> 200 OK, status updated. Existing PUT /api/orders/:id (model update with grams/hours) -> 200 OK, price calculated correctly. Reorder route does not clash with generic PUT /api/orders/:id. All backend APIs working correctly."
+
   - task: "Preis erst vom Admin (Auftrag ohne Gramm/Zeit/Preis) + E-Mail-Link + Admin-Info-Mail"
     implemented: true
     working: true
@@ -363,12 +378,11 @@ frontend:
 metadata:
   created_by: "main_agent"
   version: "1.0"
-  test_sequence: 2
+  test_sequence: 3
   run_ui: true
 
 test_plan:
-  current_focus:
-    - "Preis erst vom Admin (Auftrag ohne Gramm/Zeit/Preis) + E-Mail-Link + Admin-Info-Mail"
+  current_focus: []
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
@@ -404,3 +418,7 @@ agent_communication:
 
     -agent: "testing"
     -message: "✅ CHANGED PRICING FLOW FULLY TESTED (26/26 tests passed). All scenarios from review request verified successfully. TEST 1 - Create minimal order WITHOUT grams/hours: POST /api/orders with name+email+makerworldLink -> 200 OK, ok:true, orderNumber (3D-598398), customerCode (LUBHLYKX), price=null (as expected). Response does NOT require grams/hours. TEST 1b - Admin GET /api/orders: order.price is null (not an object), no MongoDB _id leak. TEST 2 - Track before pricing: price=null, email NOT exposed (privacy maintained). TEST 3 - Admin sets grams/time: PUT with {model:{filamentGrams:45,printHours:3}} + auth -> 200, order.price.total=6.67 (numeric > 0). CRITICAL FIX APPLIED: model.image and modelName now preserved after setting grams (was being wiped, now merged correctly). TEST 4 - Track after pricing: price.total=6.67. TEST 5 - Eilig recalculation: price.total=8.34 (exactly 25% higher, ratio 1.250). TEST 6 - Status to Abholbereit: 200, response quick (0.128s, email async). TEST 7-8 - Validation: missing name/link -> 400. TEST 9 - Auth: PUT without auth -> 401. TEST 10 - GET /api/email-status with auth -> 200, ok:true. TEST 11 - No MongoDB _id leaks. All backend APIs working correctly. Ready for user acceptance."
+    -agent: "main"
+    -message: "NEUE FUNKTION: Auftrags-Reihenfolge aendern (PUT /api/orders/reorder + sortIndex, Queue-Bezug). Auftraege haben jetzt ein Feld 'sortIndex' (Warteschlangen-Reihenfolge). (1) GET /api/orders (Admin) sortiert nach sortIndex aufsteigend; fehlender sortIndex wird lazy aus createdAt migriert. (2) POST /api/orders setzt sortIndex=Date.now() -> neue Auftraege ans Ende. (3) NEU PUT /api/orders/reorder (Bearer Auth) body {orderedIds:[...]} setzt sortIndex=Index (0,1,2...) fuer alle IDs -> ohne Auth 401, leere Liste 400. (4) queueAhead im Track-Endpoint zaehlt jetzt offene Auftraege mit KLEINEREM sortIndex (=weiter vorne in der manuellen Reihenfolge) statt nach createdAt. Bitte testen: 3 Auftraege anlegen, GET /api/orders Reihenfolge notieren, PUT reorder mit umgekehrter ID-Reihenfolge, erneut GET -> neue Reihenfolge; Track eines hinteren offenen Auftrags -> queueAhead entspricht Anzahl offener Auftraege davor; nach reorder aendert sich queueAhead entsprechend."
+    -agent: "testing"
+    -message: "✅ REORDER FEATURE FULLY TESTED (7/7 scenarios passed). All scenarios from review request verified successfully. SCENARIO 1 - Created 3 orders A, B, C: POST /api/orders -> 200 OK, each with sortIndex=Date.now() (A=1783955373120, B=1783955374497, C=1783955375643), orderNumber (3D-XXXXXX), customerCode (8 chars), status='Eingegangen'. SCENARIO 2 - GET /api/orders (admin): Returns orders sorted by sortIndex ascending, verified A < B < C. SCENARIO 3 - Reorder: PUT /api/orders/reorder with Bearer auth, body {orderedIds:[C.id, A.id, B.id]} -> 200 OK, ok:true. GET /api/orders again: sortIndex updated to reflect new order (C.sortIndex=0, A.sortIndex=1, B.sortIndex=2), verified C < A < B. SCENARIO 4 - Queue position reflects manual order: GET /api/orders/track for C -> queueAhead=0 (first in queue), A -> queueAhead=1 (one ahead), B -> queueAhead=3 (three ahead). Verified queueAhead_C < queueAhead_A < queueAhead_B. SCENARIO 5 - Queue shrinks when ahead-order completed: PUT /api/orders/C.id {status:'Abgeschlossen'} with auth -> 200 OK. Track B again -> queueAhead decreased from 3 to 2 (C no longer counts). Track C -> queueAhead=0 (completed orders always 0). SCENARIO 6 - Auth & validation: PUT /api/orders/reorder without Authorization -> 401. PUT with auth but empty body {} -> 400. PUT with auth but empty orderedIds [] -> 400. SCENARIO 7 - Regression: No MongoDB _id leaks in GET /api/orders. GET /api/orders/track does NOT expose email (privacy maintained). Existing PUT /api/orders/:id (status update) -> 200 OK, status updated. Existing PUT /api/orders/:id (model update with grams/hours) -> 200 OK, price calculated correctly. Reorder route does not clash with generic PUT /api/orders/:id. All backend APIs working correctly. Ready for user acceptance."

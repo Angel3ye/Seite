@@ -6,7 +6,7 @@ import {
   Printer, Package, Search, ShieldCheck, LogOut, Trash2, Pencil, Upload,
   Loader2, CheckCircle2, Copy, Clock, Weight, Boxes, Zap, ExternalLink,
   Sparkles, ClipboardList, RefreshCw, X, ImageIcon, Send, Home as HomeIcon,
-  Palette, Plus, Save, HelpCircle
+  Palette, Plus, Save, HelpCircle, ChevronUp, ChevronDown
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
@@ -796,6 +796,7 @@ function AdminView() {
   }
 
   const [fetchingImg, setFetchingImg] = useState(null)
+  const [reordering, setReordering] = useState(false)
   const fetchImage = async (id) => {
     setFetchingImg(id)
     try {
@@ -809,6 +810,27 @@ function AdminView() {
       toast.success('Bild geladen')
     } catch (e) { toast.error(e.message || 'Bild konnte nicht geladen werden') }
     finally { setFetchingImg(null) }
+  }
+
+  // Reihenfolge (Warteschlange) per Hoch/Runter ändern
+  const moveOrder = async (index, dir) => {
+    const target = index + (dir === 'up' ? -1 : 1)
+    if (target < 0 || target >= orders.length) return
+    const arr = [...orders]
+    const tmp = arr[index]; arr[index] = arr[target]; arr[target] = tmp
+    setOrders(arr)
+    setReordering(true)
+    try {
+      const res = await fetch('/api/orders/reorder', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ orderedIds: arr.map((o) => o.id) }),
+      })
+      if (!res.ok) throw new Error()
+    } catch (e) {
+      toast.error('Reihenfolge konnte nicht gespeichert werden.')
+      loadOrders()
+    } finally { setReordering(false) }
   }
 
   // ---- Login-Ansicht ----
@@ -874,11 +896,21 @@ function AdminView() {
         </div>
       ) : (
         <div className="grid gap-4">
-          {orders.map((o) => (
-            <motion.div key={o.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+          {orders.map((o, idx) => (
+            <motion.div key={o.id} layout initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
               <Card className="glass-card">
                 <CardContent className="p-4">
                   <div className="flex flex-col lg:flex-row gap-4">
+                    {/* Reihenfolge / Warteschlangen-Position */}
+                    <div className="flex lg:flex-col items-center justify-center gap-1 shrink-0 lg:w-12">
+                      <Button size="icon" variant="ghost" className="h-7 w-7" disabled={idx === 0 || reordering} onClick={() => moveOrder(idx, 'up')} title="Nach oben">
+                        <ChevronUp className="h-4 w-4" />
+                      </Button>
+                      <span className="grid place-items-center h-7 w-7 rounded-md bg-primary/15 text-primary text-sm font-bold" title="Position in der Warteschlange">{idx + 1}</span>
+                      <Button size="icon" variant="ghost" className="h-7 w-7" disabled={idx === orders.length - 1 || reordering} onClick={() => moveOrder(idx, 'down')} title="Nach unten">
+                        <ChevronDown className="h-4 w-4" />
+                      </Button>
+                    </div>
                     {/* Bild */}
                     <div className="flex flex-col items-center gap-1.5 shrink-0">
                       <div className="h-24 w-24 rounded-lg overflow-hidden bg-muted grid place-items-center">

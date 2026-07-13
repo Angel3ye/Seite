@@ -458,13 +458,16 @@ async function handler(request) {
       if (!order) return json({ error: 'Kein Auftrag mit diesem Code gefunden' }, 404)
       // Nur relevante, oeffentliche Felder
       const s = sanitize(order)
-      // Warteschlange: wie viele noch offene Auftraege wurden frueher erstellt?
+      // Warteschlange: wie viele noch offene Auftraege liegen in der
+      // (ggf. manuell sortierten) Reihenfolge VOR diesem Auftrag?
       const doneSet = new Set(['Fertig', 'Abholbereit', 'Abgeschlossen'])
       let queueAhead = 0
       if (!doneSet.has(s.status)) {
         const all = await orders.find({}).toArray()
+        const key = (o) => (typeof o.sortIndex === 'number' ? o.sortIndex : (Date.parse(o.createdAt) || 0))
+        const myKey = key(order)
         queueAhead = all.filter((o) =>
-          o.id !== s.id && !doneSet.has(o.status) && new Date(o.createdAt) < new Date(s.createdAt)
+          o.id !== s.id && !doneSet.has(o.status) && key(o) < myKey
         ).length
       }
       return json({
@@ -528,6 +531,7 @@ async function handler(request) {
         notes: body.notes || '',
         model: Object.keys(model).length ? model : null,   // { modelName, image, filamentGrams, printHours }
         price: null,   // wird vom Admin nach Pruefung (Gramm/Zeit) berechnet
+        sortIndex: Date.now(),   // Warteschlangen-Position; neue Auftraege ans Ende
         status: 'Eingegangen',
         statusHistory: [{ status: 'Eingegangen', at: now }],
         photos: [],
@@ -568,11 +572,32 @@ async function handler(request) {
       })
     }
 
-    // --- ADMIN: alle Auftraege auflisten ---
+    // --- ADMIN: alle Auftraege auflisten (in Warteschlangen-Reihenfolge) ---
     if (seg[0] === 'orders' && seg.length === 1 && method === 'GET') {
       if (!isAuthed(request)) return json({ error: 'Nicht autorisiert' }, 401)
-      const all = await orders.find({}).sort({ createdAt: -1 }).toArray()
+      const all = await orders.find({}).toArray()
+      // Migration: fehlenden sortIndex aus createdAt ableiten und persistieren
+      const missing = all.filter((o) => typeof o.sortIndex !== 'number')
+      if (missing.length) {
+        await Promise.all(missing.map((o) =>
+          orders.updateOne({ id: o.id }, { $set: { sortIndex: Date.parse(o.createdAt) || Date.now() } })
+        ))
+        missing.forEach((o) => { o.sortIndex = Date.parse(o.createdAt) || Date.now() })
+      }
+      all.sort((a, b) => (a.sortIndex || 0) - (b.sortIndex || 0))
       return json({ orders: all.map(sanitize) })
+    }
+
+    // --- ADMIN: Reihenfolge (Warteschlange) speichern ---
+    if (seg[0] === 'orders' && seg[1] === 'reorder' && seg.length === 2 && method === 'PUT') {
+      if (!isAuthed(request)) return json({ error: 'Nicht autorisiert' }, 401)
+      const body = await request.json().catch(() => ({}))
+      const ids = Array.isArray(body.orderedIds) ? body.orderedIds : []
+      if (!ids.length) return json({ error: 'Keine Reihenfolge angegeben' }, 400)
+      await Promise.all(ids.map((id, i) =>
+        orders.updateOne({ id }, { $set: { sortIndex: i, updatedAt: new Date().toISOString() } })
+      ))
+      return json({ ok: true })
     }
 
     // --- ADMIN: Vorschaubild (neu) laden ---
