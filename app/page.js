@@ -797,6 +797,7 @@ function AdminView() {
 
   const [fetchingImg, setFetchingImg] = useState(null)
   const [reordering, setReordering] = useState(false)
+  const [sendingMail, setSendingMail] = useState(false)
   const fetchImage = async (id) => {
     setFetchingImg(id)
     try {
@@ -831,6 +832,21 @@ function AdminView() {
       toast.error('Reihenfolge konnte nicht gespeichert werden.')
       loadOrders()
     } finally { setReordering(false) }
+  }
+
+  // Status-Mail manuell an den Kunden senden
+  const sendStatusMail = async (id) => {
+    setSendingMail(true)
+    try {
+      const res = await fetch(`/api/orders/${id}/send-status-mail`, {
+        method: 'POST', headers: { Authorization: `Bearer ${token}` },
+      })
+      const data = await res.json()
+      if (!res.ok || !data.ok) throw new Error(data.error || 'Mail konnte nicht gesendet werden')
+      toast.success('Status-Mail an den Kunden gesendet.')
+    } catch (e) {
+      toast.error(e.message || 'Mail konnte nicht gesendet werden.')
+    } finally { setSendingMail(false) }
   }
 
   // ---- Login-Ansicht ----
@@ -1109,7 +1125,6 @@ function AdminView() {
 
                 <div className="rounded-lg bg-muted/30 p-3 text-sm space-y-1">
                   <div className="flex justify-between"><span className="text-muted-foreground">Kundencode</span><span className="font-mono text-primary">{editing.customerCode}</span></div>
-                  <div className="flex justify-between"><span className="text-muted-foreground">E-Mail</span><span className="font-medium">{editing.email ? editing.email : <span className="text-muted-foreground italic">keine angegeben</span>}</span></div>
                   <div className="flex justify-between"><span className="text-muted-foreground">Preis</span><span className="font-semibold text-primary">{editing.price?.total != null ? `ca. ${eur(editing.price?.total)}` : 'noch nicht berechnet'}</span></div>
                   <a href={editing.makerworldLink} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-accent hover:underline pt-1"><ExternalLink className="h-3.5 w-3.5" /> MakerWorld-Link</a>
                 </div>
@@ -1123,6 +1138,25 @@ function AdminView() {
                 <div className="space-y-1"><Label className="flex items-center gap-1.5 text-primary"><ClipboardList className="h-4 w-4" /> Nachricht an den Kunden</Label>
                   <Textarea defaultValue={editing.customerMessage} placeholder="Wird dem Kunden in der Statusabfrage angezeigt, z. B. Dein Druck ist fertig, du kannst ihn ab Freitag abholen." onBlur={(e) => updateOrder(editing.id, { customerMessage: e.target.value })} />
                   <p className="text-xs text-muted-foreground">Sichtbar für den Kunden über den Auftragscode.</p>
+                </div>
+
+                {/* E-Mail bearbeiten + Status-Mail senden */}
+                <div className="space-y-2 rounded-lg border border-border bg-muted/20 p-3">
+                  <Label className="flex items-center gap-1.5"><Send className="h-4 w-4 text-primary" /> E-Mail des Kunden</Label>
+                  <Input
+                    key={editing.id + '-email'}
+                    type="email"
+                    defaultValue={editing.email}
+                    placeholder="keine angegeben – hier eintragen"
+                    onBlur={(e) => { const v = e.target.value.trim(); if (v !== (editing.email || '')) updateOrder(editing.id, { email: v }) }}
+                  />
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <p className="text-xs text-muted-foreground">Schickt dem Kunden eine Mail mit aktuellem Status{editing.price?.total != null ? ', Preis' : ''} & Link.</p>
+                    <Button size="sm" variant="secondary" className="gap-1" disabled={sendingMail || !editing.email} onClick={() => sendStatusMail(editing.id)}>
+                      {sendingMail ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />} Status-Mail senden
+                    </Button>
+                  </div>
+                  {!editing.email && <p className="text-xs text-amber-400/80">Trage zuerst eine E-Mail-Adresse ein, um eine Mail senden zu können.</p>}
                 </div>
 
                 {/* Fotos */}

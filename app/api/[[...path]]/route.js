@@ -1,7 +1,7 @@
 import { MongoClient } from 'mongodb'
 import { v4 as uuidv4 } from 'uuid'
 import { NextResponse } from 'next/server'
-import { sendOrderConfirmationEmail, sendPickupReadyEmail, sendAdminNewOrderEmail, verifyEmailConnection } from '@/lib/email'
+import { sendOrderConfirmationEmail, sendPickupReadyEmail, sendAdminNewOrderEmail, sendStatusUpdateEmail, verifyEmailConnection } from '@/lib/email'
 
 // =============================================================
 // MongoDB-Verbindung (serverless-sicher: globale, wiederverwendete
@@ -467,7 +467,7 @@ async function handler(request) {
         const key = (o) => (typeof o.sortIndex === 'number' ? o.sortIndex : (Date.parse(o.createdAt) || 0))
         const myKey = key(order)
         queueAhead = all.filter((o) =>
-          o.id !== s.id && !doneSet.has(o.status) && key(o) < myKey
+          o.id !== s.id && !doneSet.has(o.status) && key(o) > myKey
         ).length
       }
       return json({
@@ -584,7 +584,7 @@ async function handler(request) {
         ))
         missing.forEach((o) => { o.sortIndex = Date.parse(o.createdAt) || Date.now() })
       }
-      all.sort((a, b) => (a.sortIndex || 0) - (b.sortIndex || 0))
+      all.sort((a, b) => (b.sortIndex || 0) - (a.sortIndex || 0))
       return json({ orders: all.map(sanitize) })
     }
 
@@ -594,8 +594,11 @@ async function handler(request) {
       const body = await request.json().catch(() => ({}))
       const ids = Array.isArray(body.orderedIds) ? body.orderedIds : []
       if (!ids.length) return json({ error: 'Keine Reihenfolge angegeben' }, 400)
+      // orderedIds sind von oben (neueste) nach unten sortiert.
+      // Groesserer sortIndex = weiter oben (wird absteigend sortiert).
+      const n = ids.length
       await Promise.all(ids.map((id, i) =>
-        orders.updateOne({ id }, { $set: { sortIndex: i, updatedAt: new Date().toISOString() } })
+        orders.updateOne({ id }, { $set: { sortIndex: n - i, updatedAt: new Date().toISOString() } })
       ))
       return json({ ok: true })
     }
@@ -616,6 +619,29 @@ async function handler(request) {
       await orders.updateOne({ id }, { $set: { model, updatedAt: new Date().toISOString() } })
       const updated = await orders.findOne({ id })
       return json({ ok: true, order: sanitize(updated) })
+    }
+
+    // --- ADMIN: Status-Mail manuell an den Kunden senden ---
+    if (seg[0] === 'orders' && seg.length === 3 && seg[2] === 'send-status-mail' && method === 'POST') {
+      if (!isAuthed(request)) return json({ error: 'Nicht autorisiert' }, 401)
+      const id = seg[1]
+      const order = await orders.findOne({ id })
+      if (!order) return json({ error: 'Auftrag nicht gefunden' }, 404)
+      if (!order.email) return json({ ok: false, error: 'Für diesen Auftrag ist keine E-Mail-Adresse hinterlegt.' })
+      const b = (process.env.NEXT_PUBLIC_BASE_URL || '').replace(/\/$/, '')
+      const trackingUrl = b ? `${b}/?track=${order.customerCode}` : ''
+      const result = await withTimeout(sendStatusUpdateEmail({
+        to: order.email,
+        name: order.name,
+        orderNumber: order.orderNumber,
+        customerCode: order.customerCode,
+        status: order.status,
+        customerMessage: order.customerMessage || '',
+        priceTotal: order.price?.total ?? null,
+        trackingUrl,
+      }), 12000, 'Status-Update')
+      if (result && result.timeout) return json({ ok: false, error: 'Zeitüberschreitung beim Senden.' })
+      return json({ ok: true })
     }
 
     // --- ADMIN: Auftrag aktualisieren ---
