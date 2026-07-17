@@ -229,7 +229,7 @@ function InfoHint({ children }) {
 
 function HomeView({ setView, setLastOrder }) {
   const [form, setForm] = useState({
-    name: '', email: '', makerworldLink: '', color: '',
+    name: '', email: '', phone: '', makerworldLink: '', color: '',
     material: 'PLA', size: 100, quantity: 1, priority: 'Normal', notes: '',
   })
   const [submitting, setSubmitting] = useState(false)
@@ -325,6 +325,15 @@ function HomeView({ setView, setLastOrder }) {
               </Label>
               <Input type="email" placeholder="dein.name@beispiel.de" value={form.email} onChange={(e) => set('email', e.target.value)} />
               <p className="text-xs text-muted-foreground">Wenn du deine E-Mail angibst, bekommst du eine Bestätigung und eine Info, sobald dein Druck abholbereit ist.</p>
+            </div>
+
+            {/* Handynummer (optional) */}
+            <div className="space-y-2">
+              <Label className="flex items-center gap-1.5">
+                Handynummer <span className="text-xs font-normal text-muted-foreground">(optional)</span>
+              </Label>
+              <Input type="tel" placeholder="z. B. 0151 23456789" value={form.phone} onChange={(e) => set('phone', e.target.value)} />
+              <p className="text-xs text-muted-foreground">Optional per SMS: Bestätigung, Info wenn der Druck startet und wenn er abholbereit ist.</p>
             </div>
 
             {/* MakerWorld-Link */}
@@ -1149,6 +1158,14 @@ function AdminView() {
                     defaultValue={editing.email}
                     placeholder="keine angegeben – hier eintragen"
                     onBlur={(e) => { const v = e.target.value.trim(); if (v !== (editing.email || '')) updateOrder(editing.id, { email: v }) }}
+                  />
+                  <Label className="flex items-center gap-1.5 pt-1"><Send className="h-4 w-4 text-primary" /> Handynummer des Kunden</Label>
+                  <Input
+                    key={editing.id + '-phone'}
+                    type="tel"
+                    defaultValue={editing.phone}
+                    placeholder="z. B. 0151 23456789"
+                    onBlur={(e) => { const v = e.target.value.trim(); if (v !== (editing.phone || '')) updateOrder(editing.id, { phone: v }) }}
                   />
                   <div className="flex items-center justify-between gap-2 flex-wrap">
                     <p className="text-xs text-muted-foreground">Schickt dem Kunden eine Mail mit aktuellem Status{editing.price?.total != null ? ', Preis' : ''} & Link.</p>

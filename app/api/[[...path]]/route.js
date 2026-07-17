@@ -2,6 +2,7 @@ import { MongoClient } from 'mongodb'
 import { v4 as uuidv4 } from 'uuid'
 import { NextResponse } from 'next/server'
 import { sendOrderConfirmationEmail, sendPickupReadyEmail, sendAdminNewOrderEmail, sendStatusUpdateEmail, verifyEmailConnection } from '@/lib/email'
+import { sendOrderReceivedSms, sendPrintingStartedSms, sendReadyForPickupSms, verifySmsConnection } from '@/lib/sms'
 
 // =============================================================
 // MongoDB-Verbindung (serverless-sicher: globale, wiederverwendete
@@ -450,6 +451,13 @@ async function handler(request) {
       return json(result)
     }
 
+    // --- SMS-Gateway-Verbindung testen (Admin) ---
+    if (seg[0] === 'sms-status' && method === 'GET') {
+      if (!isAuthed(request)) return json({ error: 'Nicht autorisiert' }, 401)
+      const result = await verifySmsConnection()
+      return json(result)
+    }
+
     // --- Auftrag verfolgen (oeffentlich, per Code) ---
     if (seg[0] === 'orders' && seg[1] === 'track' && method === 'GET') {
       const code = (searchParams.get('code') || '').trim().toUpperCase()
@@ -522,6 +530,7 @@ async function handler(request) {
         customerCode: genCustomerCode(),
         name: body.name,
         email: typeof body.email === 'string' ? body.email.trim() : '',
+        phone: typeof body.phone === 'string' ? body.phone.trim() : '',
         makerworldLink: body.makerworldLink,
         color: body.color || 'Egal',
         material: body.material || 'PLA',
@@ -536,6 +545,7 @@ async function handler(request) {
         statusHistory: [{ status: 'Eingegangen', at: now }],
         photos: [],
         adminNotes: '',
+        smsSent: {},   // { received, printing, ready } - Schutz gegen Doppelversand
         createdAt: now,
         updatedAt: now,
       }
@@ -556,6 +566,16 @@ async function handler(request) {
           customerCode: order.customerCode,
           trackingUrl,
         }), 12000, 'Bestätigung'))
+      }
+      // Bestaetigungs-SMS an den Kunden (falls Handynummer vorhanden)
+      if (order.phone) {
+        mailJobs.push(withTimeout(
+          sendOrderReceivedSms({
+            orderId: order.id, to: order.phone, name: order.name,
+            orderNumber: order.orderNumber, customerCode: order.customerCode, trackingUrl,
+          }).then((r) => { if (r && r.ok) return orders.updateOne({ id: order.id }, { $set: { 'smsSent.received': true } }) }),
+          12000, 'SMS-Eingang'
+        ))
       }
       // Info-Mail an den Betreiber (Jannik) mit den wichtigsten Daten
       mailJobs.push(withTimeout(sendAdminNewOrderEmail({
@@ -654,7 +674,7 @@ async function handler(request) {
 
       const now = new Date().toISOString()
       const update = { updatedAt: now }
-      const allowed = ['status', 'adminNotes', 'notes', 'color', 'material', 'size', 'quantity', 'priority', 'photos', 'customerMessage', 'email']
+      const allowed = ['status', 'adminNotes', 'notes', 'color', 'material', 'size', 'quantity', 'priority', 'photos', 'customerMessage', 'email', 'phone']
       for (const k of allowed) {
         if (body[k] !== undefined) update[k] = body[k]
       }
@@ -686,27 +706,50 @@ async function handler(request) {
       await orders.updateOne({ id }, { $set: update })
       const updated = await orders.findOne({ id })
 
+      const trackUrlFor = (code) => {
+        const b = (process.env.NEXT_PUBLIC_BASE_URL || '').replace(/\/$/, '')
+        return b ? `${b}/?track=${code}` : ''
+      }
+      const statusChangedTo = (target) => body.status === target && existing.status !== target
+
       // Abhol-Mail: nur wenn Status NEU auf "Abholbereit" wechselt.
-      // Vercel-sicher: wir WARTEN (mit Timeout) auf den Versand.
-      if (
-        body.status === 'Abholbereit' &&
-        existing.status !== 'Abholbereit' &&
-        updated?.email
-      ) {
+      if (statusChangedTo('Abholbereit') && updated?.email) {
         await withTimeout(sendPickupReadyEmail({
           to: updated.email,
           name: updated.name,
           orderNumber: updated.orderNumber,
           customerCode: updated.customerCode,
           priceTotal: updated.price?.total ?? null,
-          trackingUrl: (() => {
-            const b = (process.env.NEXT_PUBLIC_BASE_URL || '').replace(/\/$/, '')
-            return b ? `${b}/?track=${updated.customerCode}` : ''
-          })(),
+          trackingUrl: trackUrlFor(updated.customerCode),
         }), 12000, 'Abholbereit')
       }
 
-      return json({ ok: true, order: sanitize(updated) })
+      // --- SMS-Benachrichtigungen bei Statuswechsel (idempotent) ---
+      if (updated?.phone) {
+        const smsSent = updated.smsSent || {}
+        if (statusChangedTo('Druck läuft') && !smsSent.printing) {
+          await withTimeout(
+            sendPrintingStartedSms({
+              orderId: updated.id, to: updated.phone, name: updated.name,
+              orderNumber: updated.orderNumber, trackingUrl: trackUrlFor(updated.customerCode),
+            }).then((r) => { if (r && r.ok) return orders.updateOne({ id }, { $set: { 'smsSent.printing': true } }) }),
+            12000, 'SMS-Druck'
+          )
+        }
+        if (statusChangedTo('Abholbereit') && !smsSent.ready) {
+          await withTimeout(
+            sendReadyForPickupSms({
+              orderId: updated.id, to: updated.phone, name: updated.name,
+              orderNumber: updated.orderNumber, priceTotal: updated.price?.total ?? null,
+              trackingUrl: trackUrlFor(updated.customerCode),
+            }).then((r) => { if (r && r.ok) return orders.updateOne({ id }, { $set: { 'smsSent.ready': true } }) }),
+            12000, 'SMS-Abholbereit'
+          )
+        }
+      }
+
+      const finalOrder = await orders.findOne({ id })
+      return json({ ok: true, order: sanitize(finalOrder) })
     }
 
     // --- ADMIN: Auftrag loeschen ---
