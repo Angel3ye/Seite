@@ -922,7 +922,7 @@ function AdminView() {
                       <Button size="icon" variant="ghost" className="h-7 w-7" disabled={idx === 0 || reordering} onClick={() => moveOrder(idx, 'up')} title="Nach oben">
                         <ChevronUp className="h-4 w-4" />
                       </Button>
-                      <span className="grid place-items-center h-7 w-7 rounded-md bg-primary/15 text-primary text-sm font-bold" title="Position in der Warteschlange">{idx + 1}</span>
+                      <span className="grid place-items-center h-7 w-7 rounded-md bg-primary/15 text-primary text-sm font-bold" title="Position in der Druck-Warteschlange (1 = als Nächstes dran)">{orders.length - idx}</span>
                       <Button size="icon" variant="ghost" className="h-7 w-7" disabled={idx === orders.length - 1 || reordering} onClick={() => moveOrder(idx, 'down')} title="Nach unten">
                         <ChevronDown className="h-4 w-4" />
                       </Button>

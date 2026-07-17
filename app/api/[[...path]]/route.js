@@ -467,7 +467,7 @@ async function handler(request) {
         const key = (o) => (typeof o.sortIndex === 'number' ? o.sortIndex : (Date.parse(o.createdAt) || 0))
         const myKey = key(order)
         queueAhead = all.filter((o) =>
-          o.id !== s.id && !doneSet.has(o.status) && key(o) > myKey
+          o.id !== s.id && !doneSet.has(o.status) && key(o) < myKey
         ).length
       }
       return json({
