@@ -545,6 +545,7 @@ async function handler(request) {
         statusHistory: [{ status: 'Eingegangen', at: now }],
         photos: [],
         adminNotes: '',
+        paid: false,
         smsSent: {},   // { received, printing, ready } - Schutz gegen Doppelversand
         createdAt: now,
         updatedAt: now,
@@ -674,7 +675,7 @@ async function handler(request) {
 
       const now = new Date().toISOString()
       const update = { updatedAt: now }
-      const allowed = ['status', 'adminNotes', 'notes', 'color', 'material', 'size', 'quantity', 'priority', 'photos', 'customerMessage', 'email', 'phone']
+      const allowed = ['status', 'adminNotes', 'notes', 'color', 'material', 'size', 'quantity', 'priority', 'photos', 'customerMessage', 'email', 'phone', 'paid']
       for (const k of allowed) {
         if (body[k] !== undefined) update[k] = body[k]
       }

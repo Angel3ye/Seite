@@ -6,7 +6,7 @@ import {
   Printer, Package, Search, ShieldCheck, LogOut, Trash2, Pencil, Upload,
   Loader2, CheckCircle2, Copy, Clock, Weight, Boxes, Zap, ExternalLink,
   Sparkles, ClipboardList, RefreshCw, X, ImageIcon, Send, Home as HomeIcon,
-  Palette, Plus, Save, HelpCircle, ChevronUp, ChevronDown
+  Palette, Plus, Save, HelpCircle, ChevronUp, ChevronDown, Check
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
@@ -953,6 +953,9 @@ function AdminView() {
                         <Badge variant="outline" className="font-mono text-xs">{o.orderNumber}</Badge>
                         <Badge variant="outline" className="font-mono text-xs bg-primary/10 text-primary border-primary/30">Code: {o.customerCode}</Badge>
                         {o.priority === 'Eilig' && <Badge className="gap-1 bg-red-500/20 text-red-300 border-red-500/40" variant="outline"><Zap className="h-3 w-3" />Eilig</Badge>}
+                        {o.paid
+                          ? <Badge className="gap-1 bg-green-500/20 text-green-300 border-green-500/40" variant="outline"><Check className="h-3 w-3" />Bezahlt</Badge>
+                          : <Badge className="gap-1 bg-amber-500/15 text-amber-300 border-amber-500/40" variant="outline">Offen</Badge>}
                       </div>
                       <div className="mt-1 text-sm text-muted-foreground truncate">{o.model?.modelName || o.makerworldLink}</div>
                       <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm">
@@ -969,6 +972,14 @@ function AdminView() {
                         <SelectTrigger className={`${STATUS_STYLES[o.status] || ''}`}><SelectValue /></SelectTrigger>
                         <SelectContent>{STATUS_STEPS.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
                       </Select>
+                      <Button
+                        size="sm"
+                        variant={o.paid ? 'default' : 'outline'}
+                        className={`gap-1 ${o.paid ? 'bg-green-600 hover:bg-green-700 text-white' : 'border-amber-500/50 text-amber-300 hover:bg-amber-500/10'}`}
+                        onClick={() => updateOrder(o.id, { paid: !o.paid })}
+                      >
+                        <Check className="h-4 w-4" /> {o.paid ? 'Bezahlt' : 'Als bezahlt markieren'}
+                      </Button>
                       <div className="flex gap-2">
                         <Button size="sm" variant="secondary" className="flex-1 gap-1" onClick={() => setEditing(o)}><Pencil className="h-3.5 w-3.5" /> Details</Button>
                         <Button size="sm" variant="ghost" className="text-destructive" onClick={() => deleteOrder(o.id)}><Trash2 className="h-4 w-4" /></Button>
