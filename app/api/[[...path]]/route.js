@@ -506,6 +506,11 @@ async function handler(request) {
       if (!body.name || !body.makerworldLink) {
         return json({ error: 'Name und MakerWorld-Link sind erforderlich' }, 400)
       }
+      const hasEmail = typeof body.email === 'string' && body.email.trim()
+      const hasPhone = typeof body.phone === 'string' && body.phone.trim()
+      if (!hasEmail && !hasPhone) {
+        return json({ error: 'Bitte gib eine E-Mail-Adresse oder eine Handynummer an.' }, 400)
+      }
 
       const now = new Date().toISOString()
 
@@ -546,6 +551,7 @@ async function handler(request) {
         photos: [],
         adminNotes: '',
         paid: false,
+        confirmed: false,   // Kunde wird erst nach Admin-Bestaetigung benachrichtigt
         smsSent: {},   // { received, printing, ready } - Schutz gegen Doppelversand
         createdAt: now,
         updatedAt: now,
@@ -556,34 +562,10 @@ async function handler(request) {
       const baseUrl = (process.env.NEXT_PUBLIC_BASE_URL || '').replace(/\/$/, '')
       const trackingUrl = baseUrl ? `${baseUrl}/?track=${order.customerCode}` : ''
 
-      // E-Mails Vercel-sicher versenden: wir WARTEN (mit Timeout) auf den
-      // Versand, damit die Serverless-Funktion nicht vorher eingefroren wird.
-      const mailJobs = []
-      if (order.email) {
-        mailJobs.push(withTimeout(sendOrderConfirmationEmail({
-          to: order.email,
-          name: order.name,
-          orderNumber: order.orderNumber,
-          customerCode: order.customerCode,
-          trackingUrl,
-        }), 12000, 'Bestätigung'))
-      }
-      // Bestaetigungs-SMS an den Kunden (falls Handynummer vorhanden)
-      if (order.phone) {
-        mailJobs.push(withTimeout(
-          sendOrderReceivedSms({
-            orderId: order.id, to: order.phone, name: order.name,
-            orderNumber: order.orderNumber, customerCode: order.customerCode, trackingUrl,
-          }).then((r) => { if (r && r.ok) return orders.updateOne({ id: order.id }, { $set: { 'smsSent.received': true } }) }),
-          12000, 'SMS-Eingang'
-        ))
-      }
-      // Info-Mail an den Betreiber (Jannik) mit den wichtigsten Daten
-      mailJobs.push(withTimeout(sendAdminNewOrderEmail({
-        order,
-        trackingUrl,
-      }), 12000, 'Admin-Info'))
-      await Promise.all(mailJobs)
+      // WICHTIG: Der Kunde wird NICHT sofort benachrichtigt. Erst wenn der
+      // Admin den Auftrag bestaetigt (POST /orders/:id/confirm), gehen
+      // Bestaetigungs-Mail + SMS raus. Hier nur die Info-Mail an Jannik.
+      await withTimeout(sendAdminNewOrderEmail({ order, trackingUrl }), 12000, 'Admin-Info')
 
       return json({
         ok: true,
@@ -638,6 +620,40 @@ async function handler(request) {
         ...(fetched.modelName ? { modelName: fetched.modelName } : {}),
       }
       await orders.updateOne({ id }, { $set: { model, updatedAt: new Date().toISOString() } })
+      const updated = await orders.findOne({ id })
+      return json({ ok: true, order: sanitize(updated) })
+    }
+
+    // --- ADMIN: Auftrag bestaetigen -> Kunde benachrichtigen (E-Mail + SMS) ---
+    if (seg[0] === 'orders' && seg.length === 3 && seg[2] === 'confirm' && method === 'POST') {
+      if (!isAuthed(request)) return json({ error: 'Nicht autorisiert' }, 401)
+      const id = seg[1]
+      const order = await orders.findOne({ id })
+      if (!order) return json({ error: 'Auftrag nicht gefunden' }, 404)
+      if (order.confirmed) {
+        return json({ ok: true, already: true, order: sanitize(order) })
+      }
+      const b = (process.env.NEXT_PUBLIC_BASE_URL || '').replace(/\/$/, '')
+      const trackingUrl = b ? `${b}/?track=${order.customerCode}` : ''
+
+      const jobs = []
+      if (order.email) {
+        jobs.push(withTimeout(sendOrderConfirmationEmail({
+          to: order.email, name: order.name, orderNumber: order.orderNumber,
+          customerCode: order.customerCode, trackingUrl,
+        }), 12000, 'Bestätigung'))
+      }
+      if (order.phone) {
+        jobs.push(withTimeout(
+          sendOrderReceivedSms({
+            orderId: order.id, to: order.phone, name: order.name,
+            orderNumber: order.orderNumber, customerCode: order.customerCode, trackingUrl,
+          }).then((r) => { if (r && r.ok) return orders.updateOne({ id }, { $set: { 'smsSent.received': true } }) }),
+          12000, 'SMS-Eingang'
+        ))
+      }
+      await Promise.all(jobs)
+      await orders.updateOne({ id }, { $set: { confirmed: true, confirmedAt: new Date().toISOString(), updatedAt: new Date().toISOString() } })
       const updated = await orders.findOne({ id })
       return json({ ok: true, order: sanitize(updated) })
     }
@@ -713,8 +729,8 @@ async function handler(request) {
       }
       const statusChangedTo = (target) => body.status === target && existing.status !== target
 
-      // Abhol-Mail: nur wenn Status NEU auf "Abholbereit" wechselt.
-      if (statusChangedTo('Abholbereit') && updated?.email) {
+      // Abhol-Mail: nur wenn Status NEU auf "Abholbereit" wechselt UND der Auftrag bestaetigt ist.
+      if (updated?.confirmed && statusChangedTo('Abholbereit') && updated?.email) {
         await withTimeout(sendPickupReadyEmail({
           to: updated.email,
           name: updated.name,
@@ -725,8 +741,8 @@ async function handler(request) {
         }), 12000, 'Abholbereit')
       }
 
-      // --- SMS-Benachrichtigungen bei Statuswechsel (idempotent) ---
-      if (updated?.phone) {
+      // --- SMS-Benachrichtigungen bei Statuswechsel (idempotent, nur wenn bestaetigt) ---
+      if (updated?.confirmed && updated?.phone) {
         const smsSent = updated.smsSent || {}
         if (statusChangedTo('Druck läuft') && !smsSent.printing) {
           await withTimeout(

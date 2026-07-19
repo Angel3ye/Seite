@@ -263,6 +263,7 @@ function HomeView({ setView, setLastOrder }) {
 
   const submit = async () => {
     if (!form.name.trim()) return toast.error('Bitte gib deinen Namen an.')
+    if (!form.email.trim() && !form.phone.trim()) return toast.error('Bitte gib eine E-Mail-Adresse ODER eine Handynummer an – darüber bekommst du Bescheid.')
     if (form.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) return toast.error('Bitte gib eine gültige E-Mail-Adresse an (oder lass das Feld leer).')
     if (!/^https?:\/\//i.test(form.makerworldLink)) return toast.error('Bitte gib einen gültigen MakerWorld-Link an.')
     setSubmitting(true)
@@ -318,22 +319,22 @@ function HomeView({ setView, setLastOrder }) {
               <Input placeholder="Dein Name" value={form.name} onChange={(e) => set('name', e.target.value)} />
             </div>
 
-            {/* E-Mail (optional) */}
+            {/* E-Mail (mind. eins von E-Mail/Handy) */}
             <div className="space-y-2">
               <Label className="flex items-center gap-1.5">
-                E-Mail <span className="text-xs font-normal text-muted-foreground">(optional)</span>
+                E-Mail <span className="text-xs font-normal text-muted-foreground">(E-Mail oder Handynummer erforderlich)</span>
               </Label>
               <Input type="email" placeholder="dein.name@beispiel.de" value={form.email} onChange={(e) => set('email', e.target.value)} />
-              <p className="text-xs text-muted-foreground">Wenn du deine E-Mail angibst, bekommst du eine Bestätigung und eine Info, sobald dein Druck abholbereit ist.</p>
+              <p className="text-xs text-muted-foreground">Darüber bekommst du die Bestätigung und Infos zum Status (sobald ich den Auftrag bestätigt habe).</p>
             </div>
 
-            {/* Handynummer (optional) */}
+            {/* Handynummer (mind. eins von E-Mail/Handy) */}
             <div className="space-y-2">
               <Label className="flex items-center gap-1.5">
-                Handynummer <span className="text-xs font-normal text-muted-foreground">(optional)</span>
+                Handynummer <span className="text-xs font-normal text-muted-foreground">(E-Mail oder Handynummer erforderlich)</span>
               </Label>
               <Input type="tel" placeholder="z. B. 0151 23456789" value={form.phone} onChange={(e) => set('phone', e.target.value)} />
-              <p className="text-xs text-muted-foreground">Optional per SMS: Bestätigung, Info wenn der Druck startet und wenn er abholbereit ist.</p>
+              <p className="text-xs text-muted-foreground">Per SMS: Bestätigung, Info wenn der Druck startet und wenn er abholbereit ist.</p>
             </div>
 
             {/* MakerWorld-Link */}
@@ -807,6 +808,24 @@ function AdminView() {
   const [fetchingImg, setFetchingImg] = useState(null)
   const [reordering, setReordering] = useState(false)
   const [sendingMail, setSendingMail] = useState(false)
+  const [confirming, setConfirming] = useState(null)
+
+  // Auftrag bestaetigen -> Kunde bekommt E-Mail/SMS
+  const confirmOrder = async (id) => {
+    setConfirming(id)
+    try {
+      const res = await fetch(`/api/orders/${id}/confirm`, {
+        method: 'POST', headers: { Authorization: `Bearer ${token}` },
+      })
+      const data = await res.json()
+      if (!res.ok || !data.ok) throw new Error(data.error || 'Bestätigung fehlgeschlagen')
+      setOrders((os) => os.map((o) => (o.id === id ? data.order : o)))
+      if (editing?.id === id) setEditing(data.order)
+      toast.success(data.already ? 'Auftrag war bereits bestätigt.' : 'Auftrag bestätigt – Kunde wurde benachrichtigt.')
+    } catch (e) {
+      toast.error(e.message || 'Bestätigung fehlgeschlagen.')
+    } finally { setConfirming(null) }
+  }
   const fetchImage = async (id) => {
     setFetchingImg(id)
     try {
@@ -953,6 +972,9 @@ function AdminView() {
                         <Badge variant="outline" className="font-mono text-xs">{o.orderNumber}</Badge>
                         <Badge variant="outline" className="font-mono text-xs bg-primary/10 text-primary border-primary/30">Code: {o.customerCode}</Badge>
                         {o.priority === 'Eilig' && <Badge className="gap-1 bg-red-500/20 text-red-300 border-red-500/40" variant="outline"><Zap className="h-3 w-3" />Eilig</Badge>}
+                        {o.confirmed
+                          ? <Badge className="gap-1 bg-primary/20 text-primary border-primary/40" variant="outline"><CheckCircle2 className="h-3 w-3" />Bestätigt</Badge>
+                          : <Badge className="gap-1 bg-orange-500/20 text-orange-300 border-orange-500/50" variant="outline">Neu · unbestätigt</Badge>}
                         {o.paid
                           ? <Badge className="gap-1 bg-green-500/20 text-green-300 border-green-500/40" variant="outline"><Check className="h-3 w-3" />Bezahlt</Badge>
                           : <Badge className="gap-1 bg-amber-500/15 text-amber-300 border-amber-500/40" variant="outline">Offen</Badge>}
@@ -968,6 +990,16 @@ function AdminView() {
                     </div>
                     {/* Aktionen */}
                     <div className="flex flex-row lg:flex-col gap-2 lg:w-52">
+                      {!o.confirmed && (
+                        <Button
+                          size="sm"
+                          className="gap-1 bg-primary hover:bg-primary/90"
+                          disabled={confirming === o.id}
+                          onClick={() => confirmOrder(o.id)}
+                        >
+                          {confirming === o.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />} Bestätigen & benachrichtigen
+                        </Button>
+                      )}
                       <Select value={o.status} onValueChange={(v) => updateOrder(o.id, { status: v })}>
                         <SelectTrigger className={`${STATUS_STYLES[o.status] || ''}`}><SelectValue /></SelectTrigger>
                         <SelectContent>{STATUS_STEPS.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>

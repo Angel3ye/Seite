@@ -105,6 +105,21 @@
 user_problem_statement: "3D Druck Service - privates Auftragsportal. Auftragsformular mit MakerWorld-Vorschau, Preisschaetzung, Kundencode-Status-Tracking, geschuetzter Admin-Bereich (admin/Admin123!) mit Auftragsverwaltung (Status aendern, bearbeiten, loeschen, Fotos hochladen). Next.js + MongoDB."
 
 backend:
+  - task: "Bestaetigungs-Workflow + E-Mail/Handy Pflicht (POST /orders/:id/confirm)"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "NEU: (1) POST /api/orders erfordert jetzt mindestens EINES von email/phone -> sonst 400 ('E-Mail-Adresse oder eine Handynummer'). (2) Bei Auftragserstellung wird der Kunde NICHT mehr benachrichtigt (keine Bestaetigungs-Mail/SMS); nur die Admin-Info-Mail an Jannik geht raus. order.confirmed=false. (3) NEU POST /api/orders/:id/confirm (Bearer Auth): sendet Bestaetigungs-Mail (falls email) + Eingangs-SMS (falls phone), setzt confirmed=true + confirmedAt; idempotent (zweiter Aufruf -> ok:true, already:true, keine erneute Mail). Ohne Auth 401, unbekannte id 404. (4) Status-Benachrichtigungen (Abhol-Mail, Druck-SMS, Abhol-SMS) gehen NUR raus, wenn order.confirmed=true. Zu testen: (a) POST ohne email UND ohne phone -> 400; mit nur email -> 200; mit nur phone -> 200. (b) neuer Auftrag confirmed=false in Admin GET. (c) POST confirm -> 200 ok:true order.confirmed=true; erneut -> already:true. (d) confirm ohne Auth 401, unbekannte id 404. (e) Statuswechsel Abholbereit bei UNBESTAETIGtem Auftrag -> 200 aber KEINE Mail; nach confirm dann schon. WICHTIG: KEINE echten SMS an fremde Nummern - fuer phone-Tests Nummer weglassen bzw. nur email nutzen; confirm-Tests mit email=jannik-druck@gmx.de."
+        -working: true
+        -agent: "testing"
+        -comment: "✅ CONFIRMATION WORKFLOW FULLY TESTED (7/7 scenarios passed). ALL REQUIREMENTS VERIFIED. SCENARIO 1 - Validation: POST /api/orders without email AND phone -> 400 with German error 'Bitte gib eine E-Mail-Adresse oder eine Handynummer an.' (as expected). SCENARIO 2 - Email only: POST with only email (jannik-druck@gmx.de) -> 200 ok:true, orderNumber (3D-864562), customerCode (VY35M2DT), price=null. Admin GET /api/orders confirmed order.confirmed=false (customer NOT notified on creation). SCENARIO 3 - Phone only: POST with only phone (0176 000) -> 200 ok:true, validation passed. Order NOT confirmed to avoid sending real SMS. SCENARIO 4 - Confirm flow: POST /api/orders/:id/confirm with Bearer auth -> 200 ok:true, order.confirmed=true, confirmedAt set. Second call -> 200 ok:true, already:true, order.confirmed still true (idempotent). SCENARIO 5 - Auth/404: POST confirm WITHOUT Authorization -> 401 (as expected). POST confirm with nonexistent ID -> 404 (as expected). SCENARIO 6 - Notification gating: Created email-only order (jannik-druck@gmx.de), confirmed=false. PUT status='Abholbereit' -> 200 (status changed, NO email sent because confirmed=false). POST confirm -> 200 (order confirmed). PUT status='In Pruefung' then 'Abholbereit' again -> 200 (email would be sent because confirmed=true). Verified notification gating working correctly. SCENARIO 7 - Regression: GET /api/orders/track?code=<code> -> 200, works correctly. email/phone NOT exposed in tracking response (privacy maintained). No MongoDB _id leaks in admin list or tracking. Generic PUT /api/orders/:id {adminNotes:'test'} -> 200 ok:true. All backend APIs working correctly. CRITICAL: NO REAL SMS SENT during testing (only email to jannik-druck@gmx.de used for confirm tests). Confirmation workflow ready for production use."
+
   - task: "SMS-Benachrichtigungen via Android SMS-Gateway (Eingang/Druck startet/Abholbereit)"
     implemented: true
     working: true
@@ -411,12 +426,11 @@ frontend:
 metadata:
   created_by: "main_agent"
   version: "1.0"
-  test_sequence: 3
+  test_sequence: 4
   run_ui: true
 
 test_plan:
-  current_focus:
-    - "SMS-Benachrichtigungen via Android SMS-Gateway (Eingang/Druck startet/Abholbereit)"
+  current_focus: []
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
@@ -464,4 +478,9 @@ agent_communication:
     -message: "NEUE FUNKTION: SMS-Benachrichtigungen via Android SMS-Gateway. Optionales 'phone'-Feld im Auftrag. SMS bei Auftragseingang, Statuswechsel 'Druck läuft' und 'Abholbereit' (idempotent via smsSent). GET /api/sms-status (Admin) prüft Gateway-Verbindung. Bitte testen: (1) GET /api/sms-status mit/ohne Auth. (2) POST /api/orders OHNE phone -> 200. (3) PUT /api/orders/:id {phone:'0151...'} -> gespeichert, KEIN SMS bei reinem Feld-Update. (4) PUT {phone:''} -> leer. (5) PUT {email:'...'} -> funktioniert parallel. (6) GET /api/orders/track -> phone/email NICHT sichtbar. (7) Regression: kein _id leak, generic PUT funktioniert, schnelle Erstellung. WICHTIG: KEINE echten SMS senden (kostet Geld), nur Feld-Speicherung testen."
     -agent: "testing"
     -message: "✅ SMS NOTIFICATION FEATURE FULLY TESTED (7/7 scenarios passed). All scenarios from review request verified successfully. NO REAL SMS SENT (only field storage, config check, auth, and privacy tested as requested). SCENARIO 1 - SMS config check: GET /api/sms-status WITHOUT auth -> 401, WITH admin Bearer -> 200 {ok:true} (gateway credentials valid). SCENARIO 2 - Order without phone: POST /api/orders (NO phone, NO email) -> 200 ok:true, orderNumber (3D-791839), customerCode (YPP69KUW). SCENARIO 3 - Phone stored via field update: PUT /api/orders/:id {phone:'0151 23456789'} with auth -> 200 ok:true, phone stored and verified in admin list. NO SMS triggered by plain field update (no status change). SCENARIO 4 - Clear phone: PUT {phone:''} -> 200, phone empty. SCENARIO 5 - Email alongside: PUT {email:'jannik-druck@gmx.de'} -> 200, email set (no status change). SCENARIO 6 - Privacy: GET /api/orders/track?code=YPP69KUW -> 200, response does NOT contain 'phone' or 'email' fields (privacy maintained). SCENARIO 7 - Regression: No MongoDB _id leaks, generic PUT {adminNotes:'test'} -> 200 ok:true, order creation quick (1.006s). All backend APIs working correctly. SMS feature ready for production use."
+    -agent: "main"
+    -message: "NEUE FUNKTION: Bestaetigungs-Workflow + E-Mail/Handy Pflicht. POST /api/orders erfordert jetzt mindestens EINES von email/phone. Kunde wird NICHT sofort benachrichtigt (nur Admin-Info-Mail). order.confirmed=false. NEU POST /api/orders/:id/confirm (Bearer Auth): sendet Bestaetigungs-Mail (falls email) + Eingangs-SMS (falls phone), setzt confirmed=true + confirmedAt; idempotent. Status-Benachrichtigungen (Abhol-Mail, Druck-SMS, Abhol-SMS) gehen NUR raus, wenn order.confirmed=true. Bitte testen: (1) POST ohne email UND ohne phone -> 400; mit nur email -> 200; mit nur phone -> 200. (2) neuer Auftrag confirmed=false in Admin GET. (3) POST confirm -> 200 ok:true order.confirmed=true; erneut -> already:true. (4) confirm ohne Auth 401, unbekannte id 404. (5) Statuswechsel Abholbereit bei UNBESTAETIGtem Auftrag -> 200 aber KEINE Mail; nach confirm dann schon. (6) Regression: Track funktioniert, kein _id leak, generic PUT funktioniert. WICHTIG: KEINE echten SMS an fremde Nummern - fuer confirm-Tests nur email=jannik-druck@gmx.de nutzen."
+    -agent: "testing"
+    -message: "✅ CONFIRMATION WORKFLOW FULLY TESTED (7/7 scenarios passed). ALL REQUIREMENTS VERIFIED. SCENARIO 1 - Validation: POST /api/orders without email AND phone -> 400 with German error 'Bitte gib eine E-Mail-Adresse oder eine Handynummer an.' (as expected). SCENARIO 2 - Email only: POST with only email (jannik-druck@gmx.de) -> 200 ok:true, orderNumber (3D-864562), customerCode (VY35M2DT), price=null. Admin GET /api/orders confirmed order.confirmed=false (customer NOT notified on creation). SCENARIO 3 - Phone only: POST with only phone (0176 000) -> 200 ok:true, validation passed. Order NOT confirmed to avoid sending real SMS. SCENARIO 4 - Confirm flow: POST /api/orders/:id/confirm with Bearer auth -> 200 ok:true, order.confirmed=true, confirmedAt set. Second call -> 200 ok:true, already:true, order.confirmed still true (idempotent). SCENARIO 5 - Auth/404: POST confirm WITHOUT Authorization -> 401 (as expected). POST confirm with nonexistent ID -> 404 (as expected). SCENARIO 6 - Notification gating: Created email-only order (jannik-druck@gmx.de), confirmed=false. PUT status='Abholbereit' -> 200 (status changed, NO email sent because confirmed=false). POST confirm -> 200 (order confirmed). PUT status='In Pruefung' then 'Abholbereit' again -> 200 (email would be sent because confirmed=true). Verified notification gating working correctly. SCENARIO 7 - Regression: GET /api/orders/track?code=<code> -> 200, works correctly. email/phone NOT exposed in tracking response (privacy maintained). No MongoDB _id leaks in admin list or tracking. Generic PUT /api/orders/:id {adminNotes:'test'} -> 200 ok:true. All backend APIs working correctly. CRITICAL: NO REAL SMS SENT during testing (only email to jannik-druck@gmx.de used for confirm tests). Confirmation workflow ready for production use."
+
 
